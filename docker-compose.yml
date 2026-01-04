@@ -1,0 +1,207 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Application
+  # =============================================================================
+  
+  app:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - RAG_ENV=development
+      - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5432/rag
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password
+    depends_on:
+      - postgres
+      - redis
+      - qdrant
+      - neo4j
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    profiles:
+      - app
+
+  worker:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+    environment:
+      - RAG_ENV=development
+      - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5432/rag
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+    depends_on:
+      - postgres
+      - redis
+      - qdrant
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs
+    command: celery -A src.workers.celery_app worker --loglevel=info
+    profiles:
+      - app
+
+  # =============================================================================
+  # Databases
+  # =============================================================================
+  
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/setup/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Vector Store
+  # =============================================================================
+  
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Graph Database
+  # =============================================================================
+  
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Observability
+  # =============================================================================
+  
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deployments/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    profiles:
+      - observability
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deployments/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    profiles:
+      - observability
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # UI
+      - "14268:14268"  # Collector
+      - "6831:6831/udp"  # Agent
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    profiles:
+      - observability
+
+  # =============================================================================
+  # Development Tools
+  # =============================================================================
+  
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  neo4j_data:
+  neo4j_logs:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: enterprise-rag-network

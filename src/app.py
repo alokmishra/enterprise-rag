@@ -9,10 +9,20 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
-from src.core.logging import setup_logging
+from src.core.logging import get_logger, setup_logging
 from src.api.routes import query, documents, admin, health
 from src.api.middleware.error_handler import error_handler_middleware
 from src.api.middleware.logging import logging_middleware
+from src.storage import (
+    init_database,
+    close_database,
+    init_vector_store,
+    close_vector_store,
+    init_cache,
+    close_cache,
+)
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -20,18 +30,37 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     """Application lifespan handler for startup and shutdown events."""
     # Startup
     setup_logging()
-    
+    logger.info("Starting Enterprise RAG System", env=settings.RAG_ENV)
+
     # Initialize connections
-    # await init_database()
-    # await init_vector_store()
-    # await init_cache()
-    
+    try:
+        await init_database()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.error("Failed to initialize database", error=str(e))
+
+    try:
+        await init_vector_store()
+        logger.info("Vector store initialized")
+    except Exception as e:
+        logger.error("Failed to initialize vector store", error=str(e))
+
+    try:
+        await init_cache()
+        logger.info("Cache initialized")
+    except Exception as e:
+        logger.error("Failed to initialize cache", error=str(e))
+
+    logger.info("All services initialized")
+
     yield
-    
+
     # Shutdown
-    # await close_database()
-    # await close_vector_store()
-    # await close_cache()
+    logger.info("Shutting down Enterprise RAG System")
+    await close_cache()
+    await close_vector_store()
+    await close_database()
+    logger.info("Shutdown complete")
 
 
 def create_app() -> FastAPI:

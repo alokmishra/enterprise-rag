@@ -1,9 +1,10 @@
 """
 Enterprise RAG System - Test Configuration and Fixtures
 """
+from __future__ import annotations
 
 import asyncio
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator, Generator, List, Dict
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 

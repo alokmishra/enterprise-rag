@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: enterprise-rag
+  namespace: enterprise-rag
+  labels:
+    app.kubernetes.io/name: enterprise-rag
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: enterprise-rag
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: enterprise-rag
+  namespace: enterprise-rag
+  labels:
+    app.kubernetes.io/name: enterprise-rag
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+    - hosts:
+        - rag.example.com
+      secretName: rag-tls
+  rules:
+    - host: rag.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: enterprise-rag
+                port:
+                  number: 80

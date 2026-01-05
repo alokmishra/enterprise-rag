@@ -2,17 +2,21 @@
 Enterprise RAG System - Query API Routes
 """
 
-from typing import Optional
-from uuid import uuid4
+import json
+from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from src.core.logging import get_logger
 from src.core.types import QueryComplexity, RetrievalStrategy
+from src.api.services.rag_pipeline import get_rag_pipeline
+from src.agents import Orchestrator, OrchestratorConfig, StreamingOrchestrator, OutputFormat
 
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 # =============================================================================
@@ -29,7 +33,7 @@ class QueryRequest(BaseModel):
     top_k: Optional[int] = Field(None, ge=1, le=50, description="Number of results to retrieve")
     include_sources: bool = Field(True, description="Include source citations")
     stream: bool = Field(False, description="Stream the response")
-    
+
     model_config = {
         "json_schema_extra": {
             "examples": [
@@ -48,7 +52,7 @@ class SourceReference(BaseModel):
     id: str
     document_id: str
     title: Optional[str] = None
-    source: str
+    source: Optional[str] = None
     relevance_score: float
     excerpt: Optional[str] = None
 
@@ -63,7 +67,7 @@ class QueryResponse(BaseModel):
     complexity: QueryComplexity
     latency_ms: float
     tokens_used: int
-    
+
 
 class FeedbackRequest(BaseModel):
     """Request schema for query feedback."""
@@ -80,38 +84,64 @@ class FeedbackRequest(BaseModel):
 async def query(request: QueryRequest):
     """
     Execute a RAG query.
-    
+
     This endpoint processes a natural language query through the full RAG pipeline:
     1. Query analysis and classification
     2. Multi-strategy retrieval
     3. Context assembly
     4. Response generation with citations
     5. Optional fact verification
-    
+
     Returns a response with source citations.
     """
-    # TODO: Implement full query pipeline
-    
-    query_id = str(uuid4())
-    
-    # Placeholder response
-    return QueryResponse(
-        query_id=query_id,
-        query=request.query,
-        answer="This is a placeholder response. The full RAG pipeline is not yet implemented.",
-        sources=[],
-        confidence=0.0,
-        complexity=QueryComplexity.SIMPLE,
-        latency_ms=0.0,
-        tokens_used=0,
-    )
+    try:
+        pipeline = get_rag_pipeline()
+
+        result = await pipeline.query(
+            question=request.query,
+            retrieval_strategy=request.retrieval_strategy,
+            top_k=request.top_k,
+        )
+
+        # Build source references
+        sources = []
+        if request.include_sources:
+            sources = [
+                SourceReference(
+                    id=s["id"],
+                    document_id=s["document_id"],
+                    title=s.get("title"),
+                    source=s.get("source"),
+                    relevance_score=s["relevance_score"],
+                    excerpt=s.get("excerpt"),
+                )
+                for s in result.sources
+            ]
+
+        return QueryResponse(
+            query_id=result.query_id,
+            query=result.query,
+            answer=result.answer,
+            sources=sources,
+            confidence=result.confidence,
+            complexity=result.complexity,
+            latency_ms=result.latency_ms,
+            tokens_used=result.tokens_used,
+        )
+
+    except Exception as e:
+        logger.error("Query failed", error=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Query processing failed: {str(e)}"
+        )
 
 
 @router.post("/query/stream")
 async def query_stream(request: QueryRequest):
     """
     Execute a RAG query with streaming response.
-    
+
     Returns a streaming response where the answer is streamed token by token.
     Sources are provided at the end of the stream.
     """
@@ -120,14 +150,22 @@ async def query_stream(request: QueryRequest):
             status_code=400,
             detail="Use /query endpoint for non-streaming queries"
         )
-    
+
     async def generate():
-        # TODO: Implement streaming response
-        yield "data: {\"type\": \"token\", \"content\": \"Streaming \"}\n\n"
-        yield "data: {\"type\": \"token\", \"content\": \"not yet \"}\n\n"
-        yield "data: {\"type\": \"token\", \"content\": \"implemented.\"}\n\n"
-        yield "data: {\"type\": \"done\", \"sources\": []}\n\n"
-    
+        try:
+            pipeline = get_rag_pipeline()
+
+            async for chunk in pipeline.query_stream(
+                question=request.query,
+                retrieval_strategy=request.retrieval_strategy,
+                top_k=request.top_k,
+            ):
+                yield f"data: {json.dumps(chunk)}\n\n"
+
+        except Exception as e:
+            logger.error("Streaming query failed", error=str(e))
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream"
@@ -171,13 +209,129 @@ async def get_query(query_id: str):
 async def get_query_trace(query_id: str):
     """
     Get the execution trace for a query.
-    
+
     Returns detailed information about how the query was processed,
     including agent interactions and timing.
     """
     # TODO: Retrieve trace from storage
-    
+
     raise HTTPException(
         status_code=404,
         detail=f"Trace for query {query_id} not found"
+    )
+
+
+# =============================================================================
+# Multi-Agent Endpoints
+# =============================================================================
+
+class AgentQueryRequest(BaseModel):
+    """Request schema for multi-agent query endpoint."""
+    query: str = Field(..., min_length=1, max_length=10000, description="The user's question")
+    conversation_history: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="Previous conversation turns"
+    )
+    output_format: Optional[str] = Field("markdown", description="Output format: markdown, plain_text, html, json")
+    max_iterations: Optional[int] = Field(3, ge=1, le=5, description="Max refinement iterations")
+    enable_verification: bool = Field(True, description="Enable fact verification")
+    enable_critic: bool = Field(True, description="Enable quality evaluation")
+
+
+class AgentQueryResponse(BaseModel):
+    """Response schema for multi-agent query endpoint."""
+    response: str
+    citations: list[dict[str, Any]] = Field(default_factory=list)
+    trace_id: str
+    iterations: int
+    latency_ms: float
+    trace: Optional[dict[str, Any]] = None
+
+
+@router.post("/query/agent", response_model=AgentQueryResponse)
+async def agent_query(request: AgentQueryRequest):
+    """
+    Execute a query using the multi-agent RAG system.
+
+    This endpoint processes queries through a sophisticated multi-agent pipeline:
+    1. **Planner**: Analyzes query complexity and creates execution plan
+    2. **Retriever**: Retrieves relevant context using the planned strategy
+    3. **Synthesizer**: Generates response from context
+    4. **Verifier**: Fact-checks claims against sources (optional)
+    5. **Critic**: Evaluates response quality and decides on refinement (optional)
+    6. **Citation**: Links response to source documents
+    7. **Formatter**: Formats output in requested format
+
+    The system iterates through synthesis/verification/critic until
+    quality thresholds are met or max iterations reached.
+    """
+    try:
+        # Parse output format
+        output_format = OutputFormat.MARKDOWN
+        if request.output_format:
+            try:
+                output_format = OutputFormat(request.output_format.lower())
+            except ValueError:
+                pass
+
+        # Configure orchestrator
+        config = OrchestratorConfig(
+            max_iterations=request.max_iterations or 3,
+            enable_verification=request.enable_verification,
+            enable_critic=request.enable_critic,
+            output_format=output_format,
+        )
+
+        orchestrator = Orchestrator(config)
+
+        # Execute query
+        result = await orchestrator.execute(
+            query=request.query,
+            conversation_history=request.conversation_history,
+        )
+
+        return AgentQueryResponse(
+            response=result["response"],
+            citations=result.get("citations", []),
+            trace_id=result["metadata"]["trace_id"],
+            iterations=result["metadata"]["iterations"],
+            latency_ms=result["metadata"]["latency_ms"],
+            trace=result.get("trace"),
+        )
+
+    except Exception as e:
+        logger.error("Agent query failed", error=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Agent query processing failed: {str(e)}"
+        )
+
+
+@router.post("/query/agent/stream")
+async def agent_query_stream(request: AgentQueryRequest):
+    """
+    Execute a multi-agent query with streaming response.
+
+    Returns a Server-Sent Events stream with:
+    - Status updates as each agent processes
+    - Response content chunks as they are generated
+    - Final done event with trace ID
+    """
+    async def generate():
+        try:
+            orchestrator = StreamingOrchestrator()
+
+            async for event in orchestrator.execute_streaming(
+                query=request.query,
+                conversation_history=request.conversation_history,
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+
+        except Exception as e:
+            logger.error("Streaming agent query failed", error=str(e))
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream"
     )

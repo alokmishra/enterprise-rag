@@ -100,7 +100,7 @@ class ChunkModel(Base):
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     parent_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
-    metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    chunk_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

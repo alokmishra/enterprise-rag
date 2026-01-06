@@ -202,7 +202,7 @@ class ChunkRepository(LoggerMixin):
                 content_type=chunk.content_type,
                 position=chunk.position,
                 parent_id=chunk.parent_id,
-                metadata=chunk.metadata,
+                chunk_metadata=chunk.metadata,
             )
             for chunk in chunks
         ]
@@ -259,7 +259,7 @@ class ChunkRepository(LoggerMixin):
             content=model.content,
             content_type=model.content_type,
             position=model.position,
-            metadata=model.metadata or {},
+            metadata=model.chunk_metadata or {},
             parent_id=model.parent_id,
         )
 

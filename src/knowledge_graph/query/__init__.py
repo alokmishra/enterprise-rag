@@ -8,6 +8,8 @@ from src.knowledge_graph.query.search import (
     GraphSearcher,
     GraphSearchQuery,
     GraphSearchResult,
+    GraphContextBuilder,
+    SearchType,
 )
 from src.knowledge_graph.query.cypher import (
     CypherQueryBuilder,
@@ -20,5 +22,7 @@ __all__ = [
     "GraphSearcher",
     "GraphSearchQuery",
     "GraphSearchResult",
+    "GraphContextBuilder",
+    "SearchType",
     "CypherQueryBuilder",
 ]

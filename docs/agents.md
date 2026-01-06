@@ -499,15 +499,19 @@ while iteration_count < max_iterations:
 
 ---
 
-## Implementation Order (Phase 4)
+## Implementation Status
 
-```
-Week 21-22: agents/base.py (✓), agents/planner/
-Week 23-24: agents/retriever/, agents/researcher/
-Week 25-26: agents/synthesizer/, agents/verifier/
-Week 27-28: agents/critic/, agents/citation/, agents/formatter/
-            agents/workflows/, agents/communication/
-```
+| Agent | Status | Notes |
+|-------|--------|-------|
+| Orchestrator | ✅ Complete | `workflows/orchestrator.py` |
+| Planner | ✅ Complete | `planner/planner_agent.py` |
+| Retriever | ✅ Complete | `retriever/retriever_agent.py` |
+| Researcher | ⏳ Placeholder | Reserved for multi-hop reasoning |
+| Synthesizer | ✅ Complete | `synthesizer/synthesizer_agent.py` |
+| Verifier | ✅ Complete | `verifier/verifier_agent.py` |
+| Critic | ✅ Complete | `critic/critic_agent.py` |
+| Citation | ✅ Complete | `citation/citation_agent.py` |
+| Formatter | ✅ Complete | `formatter/formatter_agent.py` |
 
 ---
 
@@ -523,9 +527,8 @@ src/agents/
 ├── retriever/
 │   ├── __init__.py
 │   └── retriever_agent.py  # RetrieverAgent implementation
-├── researcher/
-│   ├── __init__.py
-│   └── researcher_agent.py # ResearcherAgent implementation
+├── researcher/             # Placeholder for multi-hop reasoning
+│   └── __init__.py
 ├── synthesizer/
 │   ├── __init__.py
 │   └── synthesizer_agent.py
@@ -541,15 +544,14 @@ src/agents/
 ├── formatter/
 │   ├── __init__.py
 │   └── formatter_agent.py
-├── communication/
-│   ├── __init__.py
-│   └── message_bus.py      # Inter-agent messaging
+├── communication/          # Placeholder for message bus
+│   └── __init__.py
 └── workflows/
     ├── __init__.py
-    ├── standard.py         # Standard query workflow
-    ├── complex.py          # Complex query workflow
     └── orchestrator.py     # Main orchestrator
 ```
+
+**Note**: The Researcher agent and inter-agent message bus are placeholders for future implementation. Currently, agent communication happens directly through the Orchestrator. Knowledge graph queries are handled through `src/knowledge_graph/` module integration.
 
 ---
 

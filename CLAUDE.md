@@ -27,6 +27,7 @@ src/
 ├── api/                    # FastAPI application
 │   ├── routes/             # API endpoints (health, query, documents)
 │   ├── middleware/         # Auth, logging, error handling
+│   ├── schemas/            # Pydantic request/response models
 │   └── services/           # Business logic (rag_pipeline, retrieval_service)
 │
 ├── agents/                 # Multi-agent system (Phase 4)
@@ -38,7 +39,15 @@ src/
 │   ├── critic/             # Quality evaluation agent
 │   ├── citation/           # Source linking agent
 │   ├── formatter/          # Output formatting agent
+│   ├── communication/      # Agent message bus
 │   └── workflows/          # Orchestrator, execution flows
+│
+├── auth/                   # Authentication & Authorization (Phase 5)
+│   ├── api_key.py          # API key management
+│   ├── jwt.py              # JWT token handling
+│   ├── rbac.py             # Role-based access control
+│   ├── audit.py            # Audit logging
+│   └── providers/          # OAuth, SAML providers
 │
 ├── core/                   # Core utilities
 │   ├── config.py           # Settings (Pydantic BaseSettings)
@@ -46,27 +55,52 @@ src/
 │   ├── exceptions.py       # Custom exceptions
 │   └── types.py            # Shared Pydantic models, enums
 │
+├── observability/          # Monitoring & Tracing (Phase 5)
+│   ├── metrics.py          # Prometheus metrics
+│   ├── tracing.py          # OpenTelemetry distributed tracing
+│   └── middleware.py       # Observability middleware
+│
 ├── storage/                # Storage backends
 │   ├── base.py             # Abstract interfaces
-│   ├── vector/qdrant.py    # Qdrant vector store
-│   ├── cache/redis.py      # Redis cache
-│   └── document/           # PostgreSQL (models, database, repository)
+│   ├── vector/             # Qdrant vector store
+│   ├── cache/              # Redis cache
+│   ├── document/           # PostgreSQL (models, database, repository)
+│   ├── metadata/           # Metadata storage
+│   └── queue/              # Message queues
 │
 ├── ingestion/              # Document processing (Phase 2)
 │   ├── processors/         # PDF, DOCX, HTML, text, code parsers
 │   ├── chunking/           # Recursive, sentence, paragraph chunkers
-│   └── embeddings/         # OpenAI embeddings with batching
+│   ├── embeddings/         # OpenAI embeddings with batching
+│   ├── connectors/         # Source connectors (S3, SharePoint, etc.)
+│   └── multimodal/         # Image, audio, document processing (Phase 6)
 │
 ├── retrieval/              # Search & retrieval (Phase 3)
 │   ├── search/             # Vector, sparse (BM25), hybrid search
 │   ├── query/              # Query expansion, HyDE
 │   ├── reranking/          # LLM and cross-encoder rerankers
 │   ├── filters/            # Metadata filtering
-│   └── context/            # Context assembly with token budgeting
+│   ├── context/            # Context assembly with token budgeting
+│   └── multimodal/         # Multi-modal retrieval fusion (Phase 6)
 │
-└── generation/             # LLM integration (Phase 2)
-    ├── llm/                # Anthropic, OpenAI clients + factory
-    └── prompts/            # RAG prompt templates
+├── generation/             # LLM integration (Phase 2)
+│   ├── llm/                # Anthropic, OpenAI clients + factory
+│   ├── prompts/            # RAG prompt templates
+│   └── streaming/          # Response streaming
+│
+├── knowledge_graph/        # Knowledge Graph (Phase 7)
+│   ├── extraction/         # Entity and relationship extraction
+│   ├── storage/            # Neo4j graph store
+│   ├── query/              # Graph traversal, Cypher queries
+│   └── ontology/           # Entity/relationship definitions
+│
+├── admin/                  # Admin functionality
+│   ├── dashboard/          # Admin dashboard routes
+│   └── management/         # Management commands
+│
+└── workers/                # Background workers
+    ├── celery_app.py       # Celery configuration
+    └── tasks/              # Async task definitions
 ```
 
 ## Implementation Status
@@ -77,9 +111,9 @@ src/
 | 2. Core RAG | Complete | ingestion/, retrieval/search, generation/ |
 | 3. Advanced Retrieval | Complete | hybrid search, reranking, query expansion |
 | 4. Multi-Agent | Complete | All 7 agents + orchestrator |
-| 5. Production | Pending | Auth, monitoring, deployment |
-| 6. Multi-Modal | Pending | Image, audio, video processing |
-| 7. Knowledge Graph | Pending | knowledge_graph/, entity extraction |
+| 5. Production | Complete | auth/, observability/, admin/, workers/ |
+| 6. Multi-Modal | Complete | ingestion/multimodal/, retrieval/multimodal/ |
+| 7. Knowledge Graph | Complete | knowledge_graph/ (extraction, storage, query, ontology) |
 
 ## Key Patterns
 

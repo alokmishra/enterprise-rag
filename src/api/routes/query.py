@@ -2,6 +2,8 @@
 Enterprise RAG System - Query API Routes
 """
 
+from __future__ import annotations
+
 import json
 from typing import Any, Optional
 
@@ -13,6 +15,7 @@ from src.core.logging import get_logger
 from src.core.types import QueryComplexity, RetrievalStrategy
 from src.api.services.rag_pipeline import get_rag_pipeline
 from src.agents import Orchestrator, OrchestratorConfig, StreamingOrchestrator, OutputFormat
+from src.storage import get_database, QueryLogRepository
 
 
 router = APIRouter()
@@ -105,18 +108,42 @@ async def query(request: QueryRequest):
 
         # Build source references
         sources = []
+        sources_for_storage = []
         if request.include_sources:
-            sources = [
-                SourceReference(
+            for s in result.sources:
+                sources.append(SourceReference(
                     id=s["id"],
                     document_id=s["document_id"],
                     title=s.get("title"),
                     source=s.get("source"),
                     relevance_score=s["relevance_score"],
                     excerpt=s.get("excerpt"),
+                ))
+                sources_for_storage.append({
+                    "id": s["id"],
+                    "document_id": s["document_id"],
+                    "title": s.get("title"),
+                    "source": s.get("source"),
+                    "relevance_score": s["relevance_score"],
+                })
+
+        # Persist query to database
+        try:
+            async for session in get_database().session():
+                repo = QueryLogRepository(session)
+                await repo.create(
+                    query=result.query,
+                    answer=result.answer,
+                    conversation_id=request.conversation_id,
+                    latency_ms=result.latency_ms,
+                    tokens_used=result.tokens_used,
+                    confidence=result.confidence,
+                    sources_used=sources_for_storage,
                 )
-                for s in result.sources
-            ]
+                await session.commit()
+        except Exception as persist_error:
+            # Log but don't fail the request if persistence fails
+            logger.warning("Failed to persist query", error=str(persist_error))
 
         return QueryResponse(
             query_id=result.query_id,
@@ -176,7 +203,7 @@ async def query_stream(request: QueryRequest):
 async def submit_feedback(query_id: str, request: FeedbackRequest):
     """
     Submit feedback for a query response.
-    
+
     This feedback is used to improve the system over time.
     """
     if request.query_id != query_id:
@@ -184,28 +211,121 @@ async def submit_feedback(query_id: str, request: FeedbackRequest):
             status_code=400,
             detail="Query ID in path does not match body"
         )
-    
-    # TODO: Store feedback
-    
-    return {"status": "success", "message": "Feedback recorded"}
+
+    # Check if database is connected
+    db = get_database()
+    if not db.is_connected:
+        # Graceful degradation - accept feedback without persisting
+        logger.warning("Database not connected, feedback not persisted", query_id=query_id)
+        return {"status": "accepted", "message": "Feedback received (not persisted)", "query_id": query_id}
+
+    try:
+        async for session in db.session():
+            repo = QueryLogRepository(session)
+
+            # Check if query exists
+            query_log = await repo.get(query_id)
+            if query_log is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Query {query_id} not found"
+                )
+
+            # Update feedback
+            success = await repo.update_feedback(
+                query_id=query_id,
+                rating=request.rating,
+                feedback=request.feedback,
+            )
+
+            if not success:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to record feedback"
+                )
+
+            await session.commit()
+
+        logger.info(
+            "Feedback recorded",
+            query_id=query_id,
+            rating=request.rating,
+        )
+
+        return {"status": "success", "message": "Feedback recorded", "query_id": query_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to store feedback", query_id=query_id, error=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to store feedback: {str(e)}"
+        )
 
 
-@router.get("/query/{query_id}")
+class QueryDetailResponse(BaseModel):
+    """Response schema for query detail endpoint."""
+    query_id: str
+    query: str
+    answer: Optional[str] = None
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+    latency_ms: float
+    tokens_used: int
+    confidence: Optional[float] = None
+    rating: Optional[int] = None
+    feedback: Optional[str] = None
+    created_at: str
+
+
+@router.get("/query/{query_id}", response_model=QueryDetailResponse)
 async def get_query(query_id: str):
     """
     Get details of a previous query.
-    
+
     Returns the full query details including the response and sources.
     """
-    # TODO: Retrieve query from storage
-    
-    raise HTTPException(
-        status_code=404,
-        detail=f"Query {query_id} not found"
-    )
+    try:
+        async for session in get_database().session():
+            repo = QueryLogRepository(session)
+            query_log = await repo.get(query_id)
+
+            if query_log is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Query {query_id} not found"
+                )
+
+            return QueryDetailResponse(
+                query_id=query_log.id,
+                query=query_log.query,
+                answer=query_log.answer,
+                sources=query_log.sources_used or [],
+                latency_ms=query_log.latency_ms,
+                tokens_used=query_log.tokens_used,
+                confidence=query_log.confidence,
+                rating=query_log.rating,
+                feedback=query_log.feedback,
+                created_at=query_log.created_at.isoformat(),
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to retrieve query", query_id=query_id, error=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve query: {str(e)}"
+        )
 
 
-@router.get("/query/{query_id}/trace")
+class QueryTraceResponse(BaseModel):
+    """Response schema for query trace endpoint."""
+    query_id: str
+    trace: dict[str, Any]
+
+
+@router.get("/query/{query_id}/trace", response_model=QueryTraceResponse)
 async def get_query_trace(query_id: str):
     """
     Get the execution trace for a query.
@@ -213,12 +333,36 @@ async def get_query_trace(query_id: str):
     Returns detailed information about how the query was processed,
     including agent interactions and timing.
     """
-    # TODO: Retrieve trace from storage
+    try:
+        async for session in get_database().session():
+            repo = QueryLogRepository(session)
+            query_log = await repo.get(query_id)
 
-    raise HTTPException(
-        status_code=404,
-        detail=f"Trace for query {query_id} not found"
-    )
+            if query_log is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Query {query_id} not found"
+                )
+
+            if not query_log.trace_data:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Trace for query {query_id} not found"
+                )
+
+            return QueryTraceResponse(
+                query_id=query_log.id,
+                trace=query_log.trace_data,
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to retrieve trace", query_id=query_id, error=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve trace: {str(e)}"
+        )
 
 
 # =============================================================================
@@ -289,6 +433,22 @@ async def agent_query(request: AgentQueryRequest):
             query=request.query,
             conversation_history=request.conversation_history,
         )
+
+        # Persist query to database with trace data
+        try:
+            async for session in get_database().session():
+                repo = QueryLogRepository(session)
+                await repo.create(
+                    query=request.query,
+                    answer=result["response"],
+                    latency_ms=result["metadata"]["latency_ms"],
+                    tokens_used=0,  # TODO: track tokens in orchestrator
+                    trace_data=result.get("trace", {}),
+                    sources_used=result.get("citations", []),
+                )
+                await session.commit()
+        except Exception as persist_error:
+            logger.warning("Failed to persist agent query", error=str(persist_error))
 
         return AgentQueryResponse(
             response=result["response"],

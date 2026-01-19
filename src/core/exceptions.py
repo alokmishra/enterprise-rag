@@ -2,6 +2,8 @@
 Enterprise RAG System - Custom Exceptions
 """
 
+from __future__ import annotations
+
 from typing import Any, Optional
 
 
@@ -156,11 +158,21 @@ class AgentError(RAGException):
 
 class AgentTimeoutError(AgentError):
     """Raised when agent execution times out."""
-    
+
     def __init__(self, agent_name: str, timeout_seconds: int):
         super().__init__(
             message=f"Agent {agent_name} timed out after {timeout_seconds}s",
             details={"agent_name": agent_name, "timeout_seconds": timeout_seconds}
+        )
+
+
+class QueryTimeoutError(AgentError):
+    """Raised when query execution times out."""
+
+    def __init__(self, timeout_seconds: int, trace_id: str | None = None):
+        super().__init__(
+            message=f"Query execution timed out after {timeout_seconds}s",
+            details={"timeout_seconds": timeout_seconds, "trace_id": trace_id}
         )
 
 

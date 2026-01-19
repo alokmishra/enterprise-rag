@@ -5,6 +5,9 @@ The Retriever Agent is responsible for fetching relevant context
 from the knowledge base based on the query and execution plan.
 """
 
+from __future__ import annotations
+
+import asyncio
 import time
 from typing import Any, Optional
 
@@ -77,17 +80,31 @@ class RetrieverAgent(BaseAgent):
             if sub_queries:
                 queries.extend(sub_queries)
 
-            # Execute retrieval
-            all_results = []
-
-            for query in queries:
-                results = await self._retrieve(
+            # Execute retrieval in parallel for all queries
+            retrieval_tasks = [
+                self._retrieve(
                     query=query,
                     strategy=strategy,
                     top_k=top_k,
                     filters=filters,
                 )
-                all_results.extend(results)
+                for query in queries
+            ]
+
+            # Wait for all retrievals to complete
+            results_list = await asyncio.gather(*retrieval_tasks, return_exceptions=True)
+
+            # Flatten results, handling any exceptions
+            all_results = []
+            for i, results in enumerate(results_list):
+                if isinstance(results, Exception):
+                    self.logger.warning(
+                        "Retrieval failed for query",
+                        query_index=i,
+                        error=str(results),
+                    )
+                else:
+                    all_results.extend(results)
 
             # Deduplicate and assemble context
             assembled = self._context_assembler.assemble(
@@ -157,17 +174,28 @@ class RetrieverAgent(BaseAgent):
             return result.results
 
         elif strategy == RetrievalStrategy.MULTI_QUERY:
-            # Expand query and search with variations
+            # Expand query and search with variations in parallel
             variations = await self._query_expander.expand(query, num_variations=3)
-            all_results = []
 
-            for var in variations:
-                result = await self._hybrid_searcher.search(
+            # Execute all variation searches in parallel
+            search_tasks = [
+                self._hybrid_searcher.search(
                     query=var,
                     top_k=top_k,
                     filters=filters,
                 )
-                all_results.extend(result.results)
+                for var in variations
+            ]
+
+            results_list = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+            # Flatten results
+            all_results = []
+            for result in results_list:
+                if isinstance(result, Exception):
+                    self.logger.warning("Multi-query search failed", error=str(result))
+                else:
+                    all_results.extend(result.results)
 
             return all_results
 

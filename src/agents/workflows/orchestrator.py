@@ -5,12 +5,14 @@ The Orchestrator coordinates all agents and manages the
 execution flow for RAG queries.
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 from typing import Any, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.agents.base import BaseAgent, AgentConfig, AgentResult
 from src.agents.planner import PlannerAgent
@@ -22,6 +24,7 @@ from src.agents.citation import CitationAgent
 from src.agents.formatter import FormatterAgent, OutputFormat
 from src.core.logging import get_logger
 from src.core.types import AgentState, AgentType
+from src.core.exceptions import QueryTimeoutError
 
 
 logger = get_logger(__name__)
@@ -39,7 +42,7 @@ class OrchestratorConfig(BaseModel):
 class ExecutionTrace(BaseModel):
     """Trace of agent execution."""
     trace_id: str
-    steps: list[dict[str, Any]] = []
+    steps: list[dict[str, Any]] = Field(default_factory=list)
     total_latency_ms: float = 0.0
     final_status: str = "pending"
 
@@ -105,79 +108,27 @@ class Orchestrator:
         trace = ExecutionTrace(trace_id=trace_id)
 
         try:
-            # Step 1: Planning
-            state, trace = await self._execute_planner(state, trace)
-
-            # Step 2: Retrieval
-            state, trace = await self._execute_retriever(state, trace)
-
-            # Iteration loop
-            iteration = 0
-            while iteration < self.config.max_iterations:
-                state.iteration_count = iteration
-
-                # Step 3: Synthesis
-                state, trace = await self._execute_synthesizer(state, trace)
-
-                # Step 4: Verification (optional)
-                if self.config.enable_verification:
-                    state, trace = await self._execute_verifier(state, trace)
-
-                # Step 5: Critic evaluation (optional)
-                if self.config.enable_critic:
-                    state, trace = await self._execute_critic(state, trace)
-
-                    # Check critic decision
-                    if state.critic_feedback:
-                        decision = state.critic_feedback[-1].get("decision", CriticDecision.PASS)
-
-                        if decision == CriticDecision.PASS:
-                            break
-                        elif decision == CriticDecision.RETRIEVAL_NEEDED:
-                            # Re-retrieve with different strategy
-                            state, trace = await self._execute_retriever(
-                                state, trace, expand_search=True
-                            )
-                        elif decision == CriticDecision.REJECT:
-                            # Cannot provide good response
-                            break
-                        # MINOR_REVISION and MAJOR_REVISION continue to next iteration
-                else:
-                    # No critic, break after first synthesis
-                    break
-
-                iteration += 1
-
-            # Step 6: Citations
-            state, trace = await self._execute_citation(state, trace)
-
-            # Step 7: Formatting
-            state, trace = await self._execute_formatter(
-                state, trace, format=self.config.output_format
+            # Execute pipeline with timeout
+            result = await asyncio.wait_for(
+                self._execute_pipeline(state, trace, start_time),
+                timeout=self.config.timeout_seconds
             )
+            return result
 
-            # Prepare result
-            total_latency = (time.time() - start_time) * 1000
-            trace.total_latency_ms = total_latency
-            trace.final_status = "success"
+        except asyncio.TimeoutError:
+            trace.final_status = "timeout"
+            trace.total_latency_ms = (time.time() - start_time) * 1000
 
-            self.logger.info(
-                "Query execution complete",
+            self.logger.error(
+                "Query execution timed out",
                 trace_id=trace_id,
-                iterations=iteration + 1,
-                latency_ms=total_latency,
+                timeout_seconds=self.config.timeout_seconds,
             )
 
-            return {
-                "response": self._get_final_response(state),
-                "citations": self._get_citations(state),
-                "trace": trace.model_dump(),
-                "metadata": {
-                    "trace_id": trace_id,
-                    "iterations": iteration + 1,
-                    "latency_ms": total_latency,
-                },
-            }
+            raise QueryTimeoutError(
+                timeout_seconds=self.config.timeout_seconds,
+                trace_id=trace_id
+            )
 
         except Exception as e:
             trace.final_status = "error"
@@ -199,6 +150,87 @@ class Orchestrator:
                     "latency_ms": trace.total_latency_ms,
                 },
             }
+
+    async def _execute_pipeline(
+        self,
+        state: AgentState,
+        trace: ExecutionTrace,
+        start_time: float,
+    ) -> dict[str, Any]:
+        """Execute the main query pipeline."""
+        # Step 1: Planning
+        state, trace = await self._execute_planner(state, trace)
+
+        # Step 2: Retrieval
+        state, trace = await self._execute_retriever(state, trace)
+
+        # Iteration loop
+        iteration = 0
+        while iteration < self.config.max_iterations:
+            state.iteration_count = iteration
+
+            # Step 3: Synthesis
+            state, trace = await self._execute_synthesizer(state, trace)
+
+            # Step 4: Verification (optional)
+            if self.config.enable_verification:
+                state, trace = await self._execute_verifier(state, trace)
+
+            # Step 5: Critic evaluation (optional)
+            if self.config.enable_critic:
+                state, trace = await self._execute_critic(state, trace)
+
+                # Check critic decision
+                if state.critic_feedback:
+                    decision = state.critic_feedback[-1].get("decision", CriticDecision.PASS)
+
+                    if decision == CriticDecision.PASS:
+                        break
+                    elif decision == CriticDecision.RETRIEVAL_NEEDED:
+                        # Re-retrieve with different strategy
+                        state, trace = await self._execute_retriever(
+                            state, trace, expand_search=True
+                        )
+                    elif decision == CriticDecision.REJECT:
+                        # Cannot provide good response
+                        break
+                    # MINOR_REVISION and MAJOR_REVISION continue to next iteration
+            else:
+                # No critic, break after first synthesis
+                break
+
+            iteration += 1
+
+        # Step 6: Citations
+        state, trace = await self._execute_citation(state, trace)
+
+        # Step 7: Formatting
+        state, trace = await self._execute_formatter(
+            state, trace, format=self.config.output_format
+        )
+
+        # Prepare result
+        total_latency = (time.time() - start_time) * 1000
+        trace.total_latency_ms = total_latency
+        trace.final_status = "success"
+
+        self.logger.info(
+            "Query execution complete",
+            trace_id=state.trace_id,
+            iterations=iteration + 1,
+            latency_ms=total_latency,
+        )
+
+        return {
+            "response": self._get_final_response(state),
+            "citations": self._get_citations(state),
+            "trace": trace.model_dump(),
+            "metadata": {
+                "trace_id": state.trace_id,
+                "iterations": iteration + 1,
+                "latency_ms": total_latency,
+            },
+        }
 
     async def _execute_planner(
         self,

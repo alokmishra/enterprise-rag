@@ -2,10 +2,13 @@
 Enterprise RAG System - Health Check Routes
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.storage import get_database, get_vector_store, get_cache
@@ -97,14 +100,52 @@ async def detailed_health_check():
 
 @router.get("/ready")
 async def readiness_check():
-    """Kubernetes readiness probe."""
-    # Check if critical services are connected
-    db = get_database()
+    """
+    Kubernetes readiness probe.
 
-    if not db.is_connected:
-        return {"ready": False, "reason": "database not connected"}
+    Returns 200 if all critical services are connected, 503 otherwise.
+    """
+    checks = {}
+    all_ready = True
 
-    return {"ready": True}
+    # Check database (critical)
+    try:
+        db = get_database()
+        if db.is_connected:
+            checks["database"] = "connected"
+        else:
+            checks["database"] = "disconnected"
+            all_ready = False
+    except Exception as e:
+        checks["database"] = f"error: {str(e)}"
+        all_ready = False
+
+    # Check vector store (critical)
+    try:
+        vector_store = get_vector_store()
+        if vector_store.is_connected:
+            checks["vector_store"] = "connected"
+        else:
+            checks["vector_store"] = "disconnected"
+            all_ready = False
+    except Exception as e:
+        checks["vector_store"] = f"error: {str(e)}"
+        all_ready = False
+
+    # Check cache (optional - degraded mode OK)
+    try:
+        cache = get_cache()
+        if cache.is_connected:
+            checks["cache"] = "connected"
+        else:
+            checks["cache"] = "disconnected"
+    except Exception as e:
+        checks["cache"] = f"error: {str(e)}"
+
+    response_data = {"ready": all_ready, "checks": checks}
+    status_code = 200 if all_ready else 503
+
+    return JSONResponse(content=response_data, status_code=status_code)
 
 
 @router.get("/live")

@@ -2,6 +2,8 @@
 Enterprise RAG System - Configuration Management
 """
 
+from __future__ import annotations
+
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional
@@ -28,6 +30,15 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(default=False, description="Debug mode")
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
     SECRET_KEY: str = Field(default="change-me-in-production", description="Secret key")
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v, info):
+        """Ensure SECRET_KEY is changed in production."""
+        rag_env = info.data.get("RAG_ENV", "development")
+        if rag_env == "production" and v == "change-me-in-production":
+            raise ValueError("SECRET_KEY must be changed in production environment")
+        return v
     
     # -------------------------------------------------------------------------
     # Server
@@ -35,17 +46,15 @@ class Settings(BaseSettings):
     HOST: str = Field(default="0.0.0.0", description="Server host")
     PORT: int = Field(default=8000, description="Server port")
     WORKERS: int = Field(default=4, description="Number of workers")
-    CORS_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000"],
-        description="Allowed CORS origins"
+    CORS_ORIGINS: str = Field(
+        default="http://localhost:3000",
+        description="Allowed CORS origins (comma-separated)"
     )
     
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v):
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Get CORS origins as a list."""
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
     
     # -------------------------------------------------------------------------
     # Database

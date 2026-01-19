@@ -5,8 +5,12 @@ Combines dense (vector) and sparse (BM25) retrieval for improved results.
 Uses Reciprocal Rank Fusion (RRF) to merge rankings.
 """
 
+from __future__ import annotations
+
 import asyncio
 from typing import Any, Optional
+
+from anyio import to_thread
 
 from src.core.config import settings
 from src.core.logging import LoggerMixin
@@ -78,17 +82,33 @@ class HybridSearcher(LoggerMixin):
         candidate_k = min(top_k * 3, 50)
 
         # Execute searches in parallel
-        vector_task = self.vector_searcher.search(
-            query=query,
-            top_k=candidate_k,
-            filters=filters,
+        # Vector search is async
+        vector_task = asyncio.create_task(
+            self.vector_searcher.search(
+                query=query,
+                top_k=candidate_k,
+                filters=filters,
+            )
         )
 
-        # BM25 search (synchronous but fast)
-        sparse_results = self.bm25_index.search(query, top_k=candidate_k)
+        # BM25 search is synchronous - run in thread pool to avoid blocking
+        sparse_task = asyncio.create_task(
+            to_thread.run_sync(self.bm25_index.search, query, candidate_k)
+        )
 
-        # Wait for vector search
-        vector_result = await vector_task
+        # Wait for both searches in parallel
+        vector_result, sparse_results = await asyncio.gather(
+            vector_task, sparse_task, return_exceptions=True
+        )
+
+        # Handle exceptions from parallel execution
+        if isinstance(vector_result, Exception):
+            self.logger.warning("Vector search failed", error=str(vector_result))
+            vector_result = type('obj', (object,), {'results': []})()
+
+        if isinstance(sparse_results, Exception):
+            self.logger.warning("Sparse search failed", error=str(sparse_results))
+            sparse_results = []
 
         # Fuse results
         if fusion_method == "rrf":

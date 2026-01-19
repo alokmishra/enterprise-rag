@@ -2,6 +2,8 @@
 Enterprise RAG System - Prometheus Metrics
 """
 
+from __future__ import annotations
+
 import time
 from functools import wraps
 from typing import Callable, Optional
@@ -153,7 +155,7 @@ class MetricsCollector:
         settings = get_settings()
         self.info.info({
             "version": "1.0.0",
-            "environment": getattr(settings, 'environment', 'development'),
+            "environment": settings.RAG_ENV,
         })
 
     def track_request(

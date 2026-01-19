@@ -2,6 +2,8 @@
 Enterprise RAG System - Application Factory
 """
 
+from __future__ import annotations
+
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -13,6 +15,7 @@ from src.core.logging import get_logger, setup_logging
 from src.api.routes import query, documents, admin, health
 from src.api.middleware.error_handler import error_handler_middleware
 from src.api.middleware.logging import logging_middleware
+from src.api.middleware.rate_limit import rate_limit_middleware
 from src.storage import (
     init_database,
     close_database,
@@ -78,14 +81,15 @@ def create_app() -> FastAPI:
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
+        allow_origins=settings.cors_origins_list,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
     )
     
-    # Add custom middleware
+    # Add custom middleware (order matters: last added runs first)
     app.middleware("http")(error_handler_middleware)
+    app.middleware("http")(rate_limit_middleware)
     app.middleware("http")(logging_middleware)
     
     # Include routers

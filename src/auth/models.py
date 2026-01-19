@@ -2,12 +2,14 @@
 Enterprise RAG System - Auth Models
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, ConfigDict, Field, EmailStr
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, ARRAY
 from sqlalchemy.orm import relationship
@@ -29,6 +31,8 @@ class UserStatus(str, Enum):
 
 class User(BaseModel):
     """User model."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID = Field(default_factory=uuid4)
     email: EmailStr
     name: str
@@ -39,12 +43,11 @@ class User(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_login: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
-
 
 class Tenant(BaseModel):
     """Tenant model for multi-tenancy."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID = Field(default_factory=uuid4)
     name: str
     slug: str
@@ -57,12 +60,11 @@ class Tenant(BaseModel):
     max_queries_per_day: int = 1000
     max_storage_gb: float = 10.0
 
-    class Config:
-        from_attributes = True
-
 
 class APIKey(BaseModel):
     """API Key model."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID = Field(default_factory=uuid4)
     name: str
     key_hash: str
@@ -74,9 +76,6 @@ class APIKey(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     expires_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
 
 
 # =============================================================================

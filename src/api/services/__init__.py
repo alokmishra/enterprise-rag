@@ -2,6 +2,8 @@
 Enterprise RAG System - API Services
 """
 
+from __future__ import annotations
+
 from src.api.services.rag_pipeline import RAGPipeline, RAGResponse, get_rag_pipeline
 from src.api.services.retrieval_service import (
     AdvancedRetrievalService,

@@ -101,12 +101,12 @@ class TestExecutionPlan:
 
         plan = ExecutionPlan(
             complexity=QueryComplexity.STANDARD,
-            strategy=RetrievalStrategy.HYBRID,
+            retrieval_strategy=RetrievalStrategy.HYBRID,
             sub_queries=[],
             reasoning="Standard query requiring hybrid search",
         )
         assert plan.complexity == QueryComplexity.STANDARD
-        assert plan.strategy == RetrievalStrategy.HYBRID
+        assert plan.retrieval_strategy == RetrievalStrategy.HYBRID
 
     def test_execution_plan_with_sub_queries(self):
         """Test ExecutionPlan with sub-queries."""
@@ -115,7 +115,7 @@ class TestExecutionPlan:
 
         plan = ExecutionPlan(
             complexity=QueryComplexity.COMPLEX,
-            strategy=RetrievalStrategy.MULTI_QUERY,
+            retrieval_strategy=RetrievalStrategy.MULTI_QUERY,
             sub_queries=["What is X?", "How does Y relate to X?"],
             reasoning="Complex query decomposed",
         )

@@ -1,4 +1,6 @@
 # Knowledge graph queries
+from __future__ import annotations
+
 from src.knowledge_graph.query.traversal import (
     GraphTraverser,
     TraversalConfig,

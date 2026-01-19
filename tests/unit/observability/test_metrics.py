@@ -2,8 +2,7 @@
 
 import pytest
 from unittest.mock import MagicMock, patch
-
-from src.observability.metrics import MetricsCollector
+import uuid
 
 
 class TestMetricsCollector:
@@ -11,8 +10,10 @@ class TestMetricsCollector:
 
     @pytest.fixture
     def metrics_collector(self):
-        """Create MetricsCollector instance."""
-        return MetricsCollector()
+        """Create MetricsCollector instance with unique namespace."""
+        from src.observability.metrics import MetricsCollector
+        unique_ns = f"rag_test_{uuid.uuid4().hex[:8]}"
+        return MetricsCollector(namespace=unique_ns)
 
     def test_track_request(self, metrics_collector):
         """Test tracking HTTP requests."""
@@ -22,8 +23,6 @@ class TestMetricsCollector:
             status=200,
             latency=0.150,
         )
-
-        # Verify metrics were recorded (no exception)
         assert True
 
     def test_track_request_error(self, metrics_collector):
@@ -34,7 +33,6 @@ class TestMetricsCollector:
             status=500,
             latency=0.050,
         )
-
         assert True
 
     def test_track_query(self, metrics_collector):
@@ -45,7 +43,6 @@ class TestMetricsCollector:
             status="success",
             latency=1.5,
         )
-
         assert True
 
     def test_track_query_failure(self, metrics_collector):
@@ -56,7 +53,6 @@ class TestMetricsCollector:
             status="error",
             latency=0.5,
         )
-
         assert True
 
     def test_track_tokens(self, metrics_collector):
@@ -66,7 +62,6 @@ class TestMetricsCollector:
             operation="generation",
             count=500,
         )
-
         assert True
 
     def test_track_tokens_embedding(self, metrics_collector):
@@ -76,36 +71,41 @@ class TestMetricsCollector:
             operation="embedding",
             count=1000,
         )
-
         assert True
 
-    def test_track_agent_execution(self, metrics_collector):
+    def test_track_agent(self, metrics_collector):
         """Test tracking agent execution."""
-        metrics_collector.track_agent_execution(
+        metrics_collector.track_agent(
             agent="planner",
             status="success",
             latency=0.25,
         )
-
         assert True
 
-    def test_track_agent_execution_failure(self, metrics_collector):
+    def test_track_agent_failure(self, metrics_collector):
         """Test tracking failed agent execution."""
-        metrics_collector.track_agent_execution(
+        metrics_collector.track_agent(
             agent="synthesizer",
             status="error",
             latency=0.1,
         )
+        assert True
 
+    def test_track_retrieval(self, metrics_collector):
+        """Test tracking retrieval operations."""
+        metrics_collector.track_retrieval(
+            strategy="hybrid",
+            status="success",
+            result_count=10,
+        )
         assert True
 
     def test_track_error(self, metrics_collector):
         """Test tracking errors."""
         metrics_collector.track_error(
             error_type="ValidationError",
-            endpoint="/api/v1/query",
+            component="http",
         )
-
         assert True
 
     def test_track_cache_hit(self, metrics_collector):
@@ -114,7 +114,6 @@ class TestMetricsCollector:
             cache_type="query",
             hit=True,
         )
-
         assert True
 
     def test_track_cache_miss(self, metrics_collector):
@@ -123,58 +122,44 @@ class TestMetricsCollector:
             cache_type="embedding",
             hit=False,
         )
-
         assert True
 
-    def test_track_document_ingestion(self, metrics_collector):
-        """Test tracking document ingestion."""
-        metrics_collector.track_document_ingestion(
-            document_type="pdf",
-            size_bytes=1024 * 1024,
-            num_chunks=25,
-            latency=5.0,
-        )
-
+    def test_active_requests_gauge(self, metrics_collector):
+        """Test active requests gauge."""
+        metrics_collector.active_requests.inc()
+        metrics_collector.active_requests.dec()
         assert True
 
-    def test_track_vector_operation(self, metrics_collector):
-        """Test tracking vector operations."""
-        metrics_collector.track_vector_operation(
-            operation="search",
-            num_vectors=10,
-            latency=0.05,
-        )
-
+    def test_documents_ingested_counter(self, metrics_collector):
+        """Test documents ingested counter."""
+        metrics_collector.documents_ingested.labels(status="success").inc()
         assert True
 
-    def test_set_active_connections(self, metrics_collector):
-        """Test setting active connection gauge."""
-        metrics_collector.set_active_connections(5)
-        metrics_collector.set_active_connections(3)
-
-        assert True
-
-    def test_set_queue_size(self, metrics_collector):
-        """Test setting queue size gauge."""
-        metrics_collector.set_queue_size("ingestion", 10)
-        metrics_collector.set_queue_size("query", 5)
-
+    def test_chunks_created_counter(self, metrics_collector):
+        """Test chunks created counter."""
+        metrics_collector.chunks_created.inc()
         assert True
 
 
 class TestMetricsCollectorSingleton:
     """Tests for MetricsCollector singleton pattern."""
 
-    def test_singleton_instance(self):
-        """Test that MetricsCollector returns same instance."""
-        collector1 = MetricsCollector()
-        collector2 = MetricsCollector()
+    def test_get_metrics_returns_instance(self):
+        """Test that get_metrics returns a MetricsCollector instance."""
+        from src.observability.metrics import get_metrics, MetricsCollector
+        
+        collector = get_metrics()
+        assert isinstance(collector, MetricsCollector)
 
-        # Depending on implementation, may be same or different instances
-        # Just verify both work
+    def test_both_instances_work(self):
+        """Test that multiple instances with unique namespaces work correctly."""
+        from src.observability.metrics import MetricsCollector
+        
+        collector1 = MetricsCollector(namespace=f"test1_{uuid.uuid4().hex[:8]}")
+        collector2 = MetricsCollector(namespace=f"test2_{uuid.uuid4().hex[:8]}")
+
         collector1.track_request("/test", "GET", 200, 0.1)
         collector2.track_request("/test", "GET", 200, 0.1)
-
         assert True
 
 
@@ -184,28 +169,39 @@ class TestMetricsExport:
     @pytest.fixture
     def metrics_collector(self):
         """Create MetricsCollector instance."""
-        return MetricsCollector()
+        from src.observability.metrics import MetricsCollector
+        return MetricsCollector(namespace=f"rag_export_{uuid.uuid4().hex[:8]}")
 
     def test_get_metrics_output(self, metrics_collector):
         """Test getting Prometheus metrics output."""
-        # Track some metrics
         metrics_collector.track_request("/api/v1/query", "POST", 200, 0.15)
         metrics_collector.track_query("simple", "vector", "success", 0.5)
 
-        # Get metrics output
         output = metrics_collector.get_metrics()
 
-        # Verify output is a string in Prometheus format
-        assert isinstance(output, str)
-        # Should contain metric names
-        assert "rag_" in output or output == ""  # May be empty in test mode
+        assert isinstance(output, bytes)
 
-    def test_reset_metrics(self, metrics_collector):
-        """Test resetting metrics."""
-        metrics_collector.track_request("/test", "GET", 200, 0.1)
 
-        # Reset if method exists
-        if hasattr(metrics_collector, "reset"):
-            metrics_collector.reset()
+class TestConvenienceFunctions:
+    """Tests for module-level convenience functions."""
 
+    def test_track_request_function(self):
+        """Test track_request convenience function."""
+        from src.observability.metrics import track_request
+        
+        track_request("/test", "GET", 200, 0.1)
+        assert True
+
+    def test_track_tokens_function(self):
+        """Test track_tokens convenience function."""
+        from src.observability.metrics import track_tokens
+        
+        track_tokens("gpt-4", "generation", 100)
+        assert True
+
+    def test_track_error_function(self):
+        """Test track_error convenience function."""
+        from src.observability.metrics import track_error
+        
+        track_error("ValueError", "api")
         assert True

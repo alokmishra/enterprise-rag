@@ -2,6 +2,8 @@
 Enterprise RAG System - Database Connection Management
 """
 
+from __future__ import annotations
+
 import asyncio
 from typing import Any, AsyncGenerator, Optional
 

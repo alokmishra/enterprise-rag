@@ -5,6 +5,8 @@ Uses a cross-encoder model to score query-document pairs.
 More accurate than bi-encoder (embedding) similarity but slower.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Optional
 

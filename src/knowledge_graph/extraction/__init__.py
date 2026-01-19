@@ -1,4 +1,6 @@
 # Entity and relationship extraction
+from __future__ import annotations
+
 from src.knowledge_graph.extraction.entities import (
     EntityExtractor,
     Entity,

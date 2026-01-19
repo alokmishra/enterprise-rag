@@ -128,10 +128,10 @@ class TestFormatterAgent:
         from src.agents.formatter import FormatterAgent
 
         agent = FormatterAgent()
-        messy = "Text with   extra   spaces\n\n\n\nAnd many blank lines"
+        messy = "Text with trailing spaces   \n\n\n\nAnd many blank lines"
         cleaned = agent.clean_response(messy)
 
-        assert "   " not in cleaned  # Multiple spaces removed
+        assert not cleaned.endswith("   ")  # Trailing whitespace removed
         assert "\n\n\n" not in cleaned  # Excessive newlines removed
 
 

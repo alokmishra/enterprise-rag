@@ -2,6 +2,8 @@
 Enterprise RAG System - Error Handler Middleware
 """
 
+from __future__ import annotations
+
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 

@@ -2,6 +2,8 @@
 Enterprise RAG System - Logging Middleware
 """
 
+from __future__ import annotations
+
 import time
 from uuid import uuid4
 

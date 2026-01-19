@@ -2,6 +2,8 @@
 Enterprise RAG System - Anthropic (Claude) LLM Client
 """
 
+from __future__ import annotations
+
 from typing import Any, AsyncIterator, Optional
 
 from anthropic import AsyncAnthropic

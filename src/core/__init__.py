@@ -8,6 +8,8 @@ This module provides core functionality used throughout the application:
 - Shared type definitions
 """
 
+from __future__ import annotations
+
 from src.core.config import Settings, get_settings, settings
 from src.core.exceptions import (
     RAGException,

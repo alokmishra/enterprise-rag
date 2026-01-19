@@ -2,6 +2,8 @@
 Enterprise RAG System - OpenAI Embeddings Provider
 """
 
+from __future__ import annotations
+
 import asyncio
 from typing import Optional
 

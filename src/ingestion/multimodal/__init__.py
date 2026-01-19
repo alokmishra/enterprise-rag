@@ -1,4 +1,6 @@
 # Multi-modal processing for images, audio, and documents
+from __future__ import annotations
+
 from src.ingestion.multimodal.image import (
     ImageProcessor,
     OCREngine,

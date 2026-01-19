@@ -2,6 +2,8 @@
 Enterprise RAG System - Prompts Module
 """
 
+from __future__ import annotations
+
 from src.generation.prompts.templates import (
     PromptTemplate,
     RAG_SYSTEM_PROMPT,

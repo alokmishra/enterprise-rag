@@ -2,6 +2,8 @@
 Enterprise RAG System - Critic Agent Module
 """
 
+from __future__ import annotations
+
 from src.agents.critic.critic_agent import CriticAgent, CriticDecision
 
 __all__ = [

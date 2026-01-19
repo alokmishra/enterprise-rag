@@ -7,6 +7,8 @@ This module provides storage backends for:
 - Cache storage (Redis)
 """
 
+from __future__ import annotations
+
 from src.storage.base import (
     StorageBackend,
     VectorStore,

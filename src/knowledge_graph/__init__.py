@@ -1,4 +1,6 @@
 # Knowledge Graph for Enterprise RAG
+from __future__ import annotations
+
 from src.knowledge_graph.extraction import (
     EntityExtractor,
     Entity,

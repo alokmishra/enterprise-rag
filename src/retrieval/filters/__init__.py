@@ -2,6 +2,8 @@
 Enterprise RAG System - Filters Module
 """
 
+from __future__ import annotations
+
 from src.retrieval.filters.metadata import (
     FilterOperator,
     FilterCondition,

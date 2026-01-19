@@ -2,6 +2,8 @@
 Enterprise RAG System - Sentence-Based Text Chunker
 """
 
+from __future__ import annotations
+
 import re
 from typing import Optional
 

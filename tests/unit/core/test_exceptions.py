@@ -64,11 +64,11 @@ class TestSpecificExceptions:
         exc = ValidationError("Invalid input")
         assert isinstance(exc, Exception)
 
-    def test_storage_error(self):
-        """Test StorageError exception."""
-        from src.core.exceptions import StorageError
+    def test_vector_store_error(self):
+        """Test VectorStoreError exception."""
+        from src.core.exceptions import VectorStoreError
 
-        exc = StorageError("Database connection failed")
+        exc = VectorStoreError("Database connection failed")
         assert isinstance(exc, Exception)
 
     def test_configuration_error(self):

@@ -2,6 +2,8 @@
 Enterprise RAG System - FastAPI Authentication Dependencies
 """
 
+from __future__ import annotations
+
 from typing import Optional
 from uuid import UUID
 

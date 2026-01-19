@@ -18,6 +18,8 @@ Orchestration:
 - StreamingOrchestrator: Streaming response support
 """
 
+from __future__ import annotations
+
 # Base classes
 from src.agents.base import BaseAgent, AgentConfig, AgentResult
 

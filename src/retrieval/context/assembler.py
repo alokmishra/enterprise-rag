@@ -5,6 +5,8 @@ Assembles and optimizes context from retrieved documents
 for inclusion in LLM prompts.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Optional
 

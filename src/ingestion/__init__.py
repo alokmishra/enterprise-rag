@@ -7,6 +7,8 @@ This module handles document ingestion:
 - Embedding generation
 """
 
+from __future__ import annotations
+
 from src.ingestion.processors import (
     DocumentProcessor,
     ProcessedDocument,

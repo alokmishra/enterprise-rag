@@ -5,6 +5,8 @@ BM25 is a keyword-based ranking function used for text retrieval.
 This implementation provides an in-memory BM25 index for sparse search.
 """
 
+from __future__ import annotations
+
 import math
 import re
 from collections import defaultdict

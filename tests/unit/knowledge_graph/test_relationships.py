@@ -126,15 +126,15 @@ class TestRelationshipExtractor:
         """Test LLM-based extraction."""
         extractor = RelationshipExtractor(provider="llm")
 
-        with patch("src.knowledge_graph.extraction.relationships.AsyncOpenAI") as mock_client:
-            mock_response = MagicMock()
-            mock_response.choices = [MagicMock(
-                message=MagicMock(content='{"relationships": [{"source": "Tim Cook", "target": "Apple", "type": "WORKS_FOR"}]}')
-            )]
-            mock_client.return_value.chat.completions.create = AsyncMock(
-                return_value=mock_response
-            )
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(
+            message=MagicMock(content='{"relationships": [{"source": "Tim Cook", "target": "Apple", "type": "WORKS_FOR"}]}')
+        )]
 
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with patch("openai.AsyncOpenAI", return_value=mock_client):
             extractor._initialized = True
             relationships = await extractor.extract(
                 sample_text,

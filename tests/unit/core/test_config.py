@@ -24,8 +24,9 @@ class TestSettings:
         from src.core.config import get_settings
 
         settings = get_settings()
-        assert settings.app_name == "Enterprise RAG"
-        assert settings.debug is False or settings.debug is True  # Depends on env
+        assert hasattr(settings, 'DEBUG')
+        assert hasattr(settings, 'RAG_ENV')
+        assert settings.DEBUG is False or settings.DEBUG is True  # Depends on env
 
     def test_settings_env_override(self):
         """Test that environment variables override defaults."""
@@ -40,24 +41,24 @@ class TestSettings:
         from src.core.config import get_settings
 
         settings = get_settings()
-        if settings.database_url:
-            assert "postgresql" in settings.database_url or settings.database_url.startswith("sqlite")
+        if settings.DATABASE_URL:
+            assert "postgresql" in settings.DATABASE_URL or settings.DATABASE_URL.startswith("sqlite")
 
     def test_redis_url_format(self):
         """Test Redis URL configuration."""
         from src.core.config import get_settings
 
         settings = get_settings()
-        if settings.redis_url:
-            assert settings.redis_url.startswith("redis://")
+        if settings.REDIS_URL:
+            assert settings.REDIS_URL.startswith("redis://")
 
     def test_qdrant_configuration(self):
         """Test Qdrant configuration."""
         from src.core.config import get_settings
 
         settings = get_settings()
-        if settings.qdrant_url:
-            assert settings.qdrant_url.startswith("http")
+        if settings.QDRANT_URL:
+            assert settings.QDRANT_URL.startswith("http")
 
 
 class TestEnvironmentDetection:

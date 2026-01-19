@@ -5,6 +5,8 @@ Uses an LLM to score and rerank search results based on relevance.
 More expensive but can handle nuanced relevance judgments.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Optional

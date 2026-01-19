@@ -1,4 +1,5 @@
 """Multi-modal document processor for PDFs, images, and mixed content."""
+from __future__ import annotations
 
 import asyncio
 import hashlib

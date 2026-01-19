@@ -6,6 +6,8 @@ It determines query complexity, required retrieval strategies, and
 orchestrates the overall response generation approach.
 """
 
+from __future__ import annotations
+
 import json
 from typing import Any, Optional
 

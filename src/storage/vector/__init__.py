@@ -2,6 +2,8 @@
 Enterprise RAG System - Vector Storage Module
 """
 
+from __future__ import annotations
+
 from src.storage.vector.qdrant import (
     QdrantVectorStore,
     QdrantSearchResult,

@@ -2,6 +2,8 @@
 Enterprise RAG System - Document Processors Module
 """
 
+from __future__ import annotations
+
 from src.ingestion.processors.base import (
     DocumentProcessor,
     ProcessedDocument,

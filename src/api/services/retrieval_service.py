@@ -9,6 +9,8 @@ Combines all retrieval features into a unified service:
 - Context assembly
 """
 
+from __future__ import annotations
+
 import time
 from dataclasses import dataclass
 from enum import Enum

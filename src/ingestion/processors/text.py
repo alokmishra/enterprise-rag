@@ -2,6 +2,8 @@
 Enterprise RAG System - Text Document Processors
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, BinaryIO, Optional, Union
 

@@ -5,6 +5,8 @@ The Verifier Agent fact-checks claims in the generated response
 against the retrieved source documents.
 """
 
+from __future__ import annotations
+
 import json
 import re
 import time

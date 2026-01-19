@@ -9,6 +9,8 @@ to actual documents than the short query.
 Reference: https://arxiv.org/abs/2212.10496
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 from src.core.logging import LoggerMixin

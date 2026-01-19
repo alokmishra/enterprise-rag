@@ -2,6 +2,8 @@
 Enterprise RAG System - Role-Based Access Control
 """
 
+from __future__ import annotations
+
 from enum import Enum
 from functools import wraps
 from typing import Callable, Optional

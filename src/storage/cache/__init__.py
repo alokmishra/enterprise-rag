@@ -2,6 +2,8 @@
 Enterprise RAG System - Cache Storage Module
 """
 
+from __future__ import annotations
+
 from src.storage.cache.redis import (
     RedisCache,
     CacheError,

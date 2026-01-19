@@ -1,19 +1,19 @@
 """Tests for image processing."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from pathlib import Path
 import io
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from src.ingestion.multimodal.base import ModalityType
 from src.ingestion.multimodal.image import (
+    ImageEmbedder,
     ImageProcessor,
     OCREngine,
-    ImageEmbedder,
-    VisualAnalyzer,
     OCRResult,
     VisualAnalysisResult,
+    VisualAnalyzer,
 )
-from src.ingestion.multimodal.base import ModalityType
 
 
 class TestOCREngine:
@@ -121,17 +121,13 @@ class TestImageEmbedder:
     @pytest.mark.asyncio
     async def test_embed_returns_list(self, embedder, sample_image_bytes):
         """Test embedding returns list of floats."""
-        with patch.object(embedder, "_embedder") as mock_model:
-            with patch.object(embedder, "_processor") as mock_proc:
-                import torch
-                mock_model.get_image_features.return_value = torch.randn(1, 512)
-                mock_proc.return_value = {"pixel_values": torch.randn(1, 3, 224, 224)}
-                embedder._initialized = True
+        embedder._initialized = True
+        embedder._embedder = None  # Will use fallback
 
-                embedding = await embedder.embed(sample_image_bytes)
+        embedding = await embedder.embed(sample_image_bytes)
 
-                assert isinstance(embedding, list)
-                assert all(isinstance(x, float) for x in embedding)
+        assert isinstance(embedding, list)
+        assert all(isinstance(x, float) for x in embedding)
 
     @pytest.mark.asyncio
     async def test_embed_from_path(self, embedder, tmp_path):
@@ -187,7 +183,7 @@ class TestVisualAnalyzer:
         """Test OpenAI vision analysis."""
         analyzer = VisualAnalyzer(provider="openai")
 
-        with patch("src.ingestion.multimodal.image.AsyncOpenAI") as mock_client:
+        with patch("openai.AsyncOpenAI") as mock_client:
             mock_response = MagicMock()
             mock_response.choices = [
                 MagicMock(message=MagicMock(content='{"description": "A green square"}'))

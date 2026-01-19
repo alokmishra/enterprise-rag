@@ -2,6 +2,8 @@
 Enterprise RAG System - HTML Document Processor
 """
 
+from __future__ import annotations
+
 import re
 from pathlib import Path
 from typing import Any, BinaryIO, Optional, Union

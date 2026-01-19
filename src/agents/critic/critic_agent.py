@@ -5,6 +5,8 @@ The Critic Agent evaluates response quality and determines
 whether revisions are needed.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Optional

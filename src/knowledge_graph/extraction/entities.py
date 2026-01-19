@@ -1,5 +1,7 @@
 """Entity extraction for knowledge graph construction."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re

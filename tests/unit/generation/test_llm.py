@@ -31,17 +31,15 @@ class TestAnthropicClient:
         """Test AnthropicClient can be created."""
         from src.generation.llm.anthropic import AnthropicClient
 
-        with patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
-            client = AnthropicClient()
-            assert client is not None
+        client = AnthropicClient(api_key='test-key')
+        assert client is not None
 
     def test_anthropic_client_model_selection(self):
         """Test AnthropicClient model selection."""
         from src.generation.llm.anthropic import AnthropicClient
 
-        with patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
-            client = AnthropicClient(model="claude-3-sonnet-20240229")
-            assert "claude" in client.model
+        client = AnthropicClient(api_key='test-key', default_model="claude-3-sonnet-20240229")
+        assert "claude" in client.default_model
 
     @pytest.mark.asyncio
     async def test_anthropic_client_generate(self):
@@ -52,17 +50,23 @@ class TestAnthropicClient:
         mock_response = MagicMock()
         mock_response.content = [MagicMock(text="Generated response")]
         mock_response.usage = MagicMock(input_tokens=50, output_tokens=100)
+        mock_response.stop_reason = "end_turn"
+        mock_response.id = "msg_123"
+        mock_response.type = "message"
 
-        with patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
-            client = AnthropicClient()
+        client = AnthropicClient(api_key='test-key')
 
-            with patch.object(client, 'client') as mock_client:
-                mock_client.messages.create = AsyncMock(return_value=mock_response)
+        with patch.object(client, '_get_client') as mock_get_client:
+            mock_anthropic = MagicMock()
+            mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_anthropic
 
-                result = await client.generate(
-                    messages=[LLMMessage(role="user", content="Test prompt")],
-                )
-                assert result.content is not None
+            result = await client.generate(
+                messages=[LLMMessage(role="user", content="Test prompt")],
+            )
+            assert result.content is not None
+            assert result.input_tokens == 50
+            assert result.output_tokens == 100
 
 
 class TestOpenAIClient:
@@ -72,17 +76,15 @@ class TestOpenAIClient:
         """Test OpenAIClient can be created."""
         from src.generation.llm.openai import OpenAIClient
 
-        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
-            client = OpenAIClient()
-            assert client is not None
+        client = OpenAIClient(api_key='test-key')
+        assert client is not None
 
     def test_openai_client_model_selection(self):
         """Test OpenAIClient model selection."""
         from src.generation.llm.openai import OpenAIClient
 
-        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
-            client = OpenAIClient(model="gpt-4o")
-            assert "gpt" in client.model
+        client = OpenAIClient(api_key='test-key', default_model="gpt-4o")
+        assert "gpt" in client.default_model
 
     @pytest.mark.asyncio
     async def test_openai_client_generate(self):
@@ -91,19 +93,23 @@ class TestOpenAIClient:
         from src.generation.llm.base import LLMMessage
 
         mock_response = MagicMock()
-        mock_response.choices = [MagicMock(message=MagicMock(content="Generated response"))]
-        mock_response.usage = MagicMock(prompt_tokens=50, completion_tokens=100)
+        mock_response.choices = [MagicMock(message=MagicMock(content="Generated response"), finish_reason="stop")]
+        mock_response.usage = MagicMock(prompt_tokens=50, completion_tokens=100, total_tokens=150)
+        mock_response.id = "chatcmpl_123"
 
-        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
-            client = OpenAIClient()
+        client = OpenAIClient(api_key='test-key')
 
-            with patch.object(client, 'client') as mock_client:
-                mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        with patch.object(client, '_get_client') as mock_get_client:
+            mock_openai = MagicMock()
+            mock_openai.chat.completions.create = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_openai
 
-                result = await client.generate(
-                    messages=[LLMMessage(role="user", content="Test prompt")],
-                )
-                assert result.content is not None
+            result = await client.generate(
+                messages=[LLMMessage(role="user", content="Test prompt")],
+            )
+            assert result.content is not None
+            assert result.input_tokens == 50
+            assert result.output_tokens == 100
 
 
 class TestLLMFactory:
@@ -112,24 +118,29 @@ class TestLLMFactory:
     def test_get_llm_client_anthropic(self):
         """Test getting Anthropic client."""
         from src.generation.llm.factory import get_llm_client
+        from src.generation.llm.anthropic import AnthropicClient
 
-        with patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
+        with patch('src.generation.llm.factory.get_anthropic_client') as mock_get:
+            mock_get.return_value = MagicMock(spec=AnthropicClient)
             client = get_llm_client("anthropic")
             assert client is not None
 
     def test_get_llm_client_openai(self):
         """Test getting OpenAI client."""
         from src.generation.llm.factory import get_llm_client
+        from src.generation.llm.openai import OpenAIClient
 
-        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
+        with patch('src.generation.llm.factory.get_openai_client') as mock_get:
+            mock_get.return_value = MagicMock(spec=OpenAIClient)
             client = get_llm_client("openai")
             assert client is not None
 
     def test_get_llm_client_invalid_provider(self):
         """Test getting invalid provider raises error."""
         from src.generation.llm.factory import get_llm_client
+        from src.core.exceptions import ConfigurationError
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             get_llm_client("invalid_provider")
 
 
@@ -166,8 +177,13 @@ class TestLLMResponse:
 
         response = LLMResponse(
             content="Generated content",
-            tokens_used=150,
             model="gpt-4o",
+            input_tokens=50,
+            output_tokens=100,
+            total_tokens=150,
+            finish_reason="stop",
         )
         assert response.content == "Generated content"
-        assert response.tokens_used == 150
+        assert response.total_tokens == 150
+        assert response.input_tokens == 50
+        assert response.output_tokens == 100

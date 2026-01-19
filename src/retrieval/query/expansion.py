@@ -2,6 +2,8 @@
 Enterprise RAG System - Query Expansion
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 from src.core.logging import LoggerMixin

@@ -2,6 +2,8 @@
 Enterprise RAG System - Main Entry Point
 """
 
+from __future__ import annotations
+
 import uvicorn
 
 from src.app import create_app

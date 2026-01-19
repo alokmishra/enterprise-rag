@@ -2,6 +2,8 @@
 Enterprise RAG System - LLM Client Factory
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 from src.core.config import settings

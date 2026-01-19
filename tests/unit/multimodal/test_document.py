@@ -1,17 +1,16 @@
 """Tests for multi-modal document processing."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from pathlib import Path
-import io
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from src.ingestion.multimodal.base import ModalityType, MultiModalContent
 from src.ingestion.multimodal.document import (
-    PDFProcessor,
-    MultiModalDocumentProcessor,
     DocumentPage,
     DocumentStructure,
+    MultiModalDocumentProcessor,
+    PDFProcessor,
 )
-from src.ingestion.multimodal.base import ModalityType, MultiModalContent
 
 
 class TestPDFProcessor:
@@ -59,21 +58,11 @@ startxref
     @pytest.mark.asyncio
     async def test_process_returns_pages_and_structure(self, pdf_processor):
         """Test PDF processing returns pages and structure."""
-        with patch("src.ingestion.multimodal.document.fitz") as mock_fitz:
-            mock_doc = MagicMock()
-            mock_doc.__len__ = MagicMock(return_value=2)
-            mock_doc.metadata = {"title": "Test PDF", "author": "Test Author"}
-            mock_doc.get_toc.return_value = [
-                [1, "Chapter 1", 1],
-                [2, "Section 1.1", 2],
-            ]
-
-            mock_page = MagicMock()
-            mock_page.get_text.return_value = "Page content"
-            mock_page.get_images.return_value = []
-            mock_doc.__getitem__ = MagicMock(return_value=mock_page)
-
-            mock_fitz.open.return_value = mock_doc
+        with patch.object(pdf_processor, "_process_with_pdfplumber") as mock_fallback:
+            mock_fallback.return_value = (
+                [DocumentPage(page_number=1, text_content="Page content")],
+                DocumentStructure(title="Test PDF", author="Test Author"),
+            )
 
             pdf_processor._initialized = True
             pages, structure = await pdf_processor.process(b"pdf_bytes")
@@ -217,11 +206,9 @@ class TestMultiModalDocumentProcessor:
             assert "PDF text" in result.text_content
 
     @pytest.mark.asyncio
-    async def test_process_docx(self, processor, tmp_path):
+    async def test_process_docx(self, processor):
         """Test processing DOCX file."""
-        docx_path = tmp_path / "test.docx"
-
-        with patch("src.ingestion.multimodal.document.Document") as mock_doc:
+        with patch("docx.Document") as mock_doc:
             mock_doc_instance = MagicMock()
             mock_doc_instance.paragraphs = [
                 MagicMock(text="Paragraph 1"),

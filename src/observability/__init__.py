@@ -8,6 +8,8 @@ Provides:
 - Performance monitoring
 """
 
+from __future__ import annotations
+
 from src.observability.metrics import (
     MetricsCollector,
     get_metrics,

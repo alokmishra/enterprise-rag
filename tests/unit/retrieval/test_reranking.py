@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.core.types import SearchResult
+from src.retrieval.reranking.base import RerankResult
+
 
 class TestReranker:
     """Tests for the base Reranker class."""
@@ -24,89 +27,188 @@ class TestReranker:
         assert hasattr(Reranker, 'rerank')
 
 
+class TestRerankResult:
+    """Tests for the RerankResult dataclass."""
+
+    def test_rerank_result_creation(self):
+        """Test RerankResult can be created."""
+        result = RerankResult(
+            results=[],
+            original_count=5,
+            reranked_count=3,
+            latency_ms=10.5,
+        )
+        assert result.original_count == 5
+        assert result.reranked_count == 3
+        assert result.latency_ms == 10.5
+
+    def test_rerank_result_with_results(self):
+        """Test RerankResult with search results."""
+        search_results = [
+            SearchResult(chunk_id="c1", document_id="d1", content="Content 1", score=0.95, metadata={}),
+            SearchResult(chunk_id="c2", document_id="d1", content="Content 2", score=0.85, metadata={}),
+        ]
+
+        result = RerankResult(
+            results=search_results,
+            original_count=5,
+            reranked_count=2,
+            latency_ms=15.0,
+        )
+        assert len(result.results) == 2
+        assert result.results[0].score == 0.95
+
+
 class TestLLMReranker:
     """Tests for the LLMReranker class."""
 
     @pytest.fixture
-    def mock_llm_client(self):
-        """Create a mock LLM client."""
-        client = AsyncMock()
-        client.generate = AsyncMock(return_value=MagicMock(
-            content='[{"index": 0, "score": 0.9}, {"index": 1, "score": 0.7}]',
-        ))
-        return client
+    def mock_llm_response(self):
+        """Create a mock LLM response."""
+        return MagicMock(
+            content='[{"id": "c1", "score": 0.9}, {"id": "c2", "score": 0.7}]',
+        )
 
-    def test_llm_reranker_creation(self, mock_llm_client):
+    @pytest.fixture
+    def sample_results(self):
+        """Create sample search results."""
+        return [
+            SearchResult(chunk_id="c1", document_id="d1", content="First document", score=0.8, metadata={}),
+            SearchResult(chunk_id="c2", document_id="d1", content="Second document", score=0.7, metadata={}),
+        ]
+
+    def test_llm_reranker_creation(self):
         """Test LLMReranker can be created."""
         from src.retrieval.reranking.llm_reranker import LLMReranker
 
-        reranker = LLMReranker(llm_client=mock_llm_client)
+        reranker = LLMReranker()
         assert reranker is not None
+        assert reranker.batch_size == 10
+        assert reranker.score_threshold == 0.3
+
+    def test_llm_reranker_custom_params(self):
+        """Test LLMReranker with custom parameters."""
+        from src.retrieval.reranking.llm_reranker import LLMReranker
+
+        reranker = LLMReranker(batch_size=5, score_threshold=0.5)
+        assert reranker.batch_size == 5
+        assert reranker.score_threshold == 0.5
 
     @pytest.mark.asyncio
-    async def test_llm_reranker_rerank(self, mock_llm_client):
+    async def test_llm_reranker_rerank(self, mock_llm_response, sample_results):
         """Test LLMReranker rerank method."""
         from src.retrieval.reranking.llm_reranker import LLMReranker
 
-        reranker = LLMReranker(llm_client=mock_llm_client)
+        with patch('src.retrieval.reranking.llm_reranker.get_default_llm_client') as mock_get_llm:
+            mock_llm = AsyncMock()
+            mock_llm.generate = AsyncMock(return_value=mock_llm_response)
+            mock_get_llm.return_value = mock_llm
 
-        results = await reranker.rerank(
-            query="test query",
-            documents=[
-                {"id": "doc-1", "content": "First document"},
-                {"id": "doc-2", "content": "Second document"},
-            ],
-            top_k=2,
-        )
-        assert results is not None
+            reranker = LLMReranker()
+            result = await reranker.rerank(
+                query="test query",
+                results=sample_results,
+                top_k=2,
+            )
+
+            assert isinstance(result, RerankResult)
+            assert result.original_count == 2
 
     @pytest.mark.asyncio
-    async def test_llm_reranker_respects_top_k(self, mock_llm_client):
+    async def test_llm_reranker_respects_top_k(self, mock_llm_response, sample_results):
         """Test LLMReranker respects top_k."""
         from src.retrieval.reranking.llm_reranker import LLMReranker
 
-        reranker = LLMReranker(llm_client=mock_llm_client)
+        with patch('src.retrieval.reranking.llm_reranker.get_default_llm_client') as mock_get_llm:
+            mock_llm = AsyncMock()
+            mock_llm.generate = AsyncMock(return_value=mock_llm_response)
+            mock_get_llm.return_value = mock_llm
 
-        results = await reranker.rerank(
+            reranker = LLMReranker()
+            result = await reranker.rerank(
+                query="test",
+                results=sample_results + sample_results,
+                top_k=2,
+            )
+
+            assert result.reranked_count <= 2
+
+    @pytest.mark.asyncio
+    async def test_llm_reranker_empty_results(self):
+        """Test LLMReranker with empty results."""
+        from src.retrieval.reranking.llm_reranker import LLMReranker
+
+        reranker = LLMReranker()
+        result = await reranker.rerank(
             query="test",
-            documents=[{"id": f"doc-{i}", "content": f"Doc {i}"} for i in range(10)],
-            top_k=3,
+            results=[],
+            top_k=5,
         )
-        assert len(results) <= 3
+
+        assert result.original_count == 0
+        assert result.reranked_count == 0
 
 
 class TestCrossEncoderReranker:
     """Tests for the CrossEncoderReranker class."""
 
+    @pytest.fixture
+    def sample_results(self):
+        """Create sample search results."""
+        return [
+            SearchResult(chunk_id="c1", document_id="d1", content="First", score=0.8, metadata={}),
+            SearchResult(chunk_id="c2", document_id="d1", content="Second", score=0.7, metadata={}),
+            SearchResult(chunk_id="c3", document_id="d1", content="Third", score=0.6, metadata={}),
+        ]
+
     def test_cross_encoder_reranker_creation(self):
         """Test CrossEncoderReranker can be created."""
         from src.retrieval.reranking.cross_encoder import CrossEncoderReranker
 
-        with patch('src.retrieval.reranking.cross_encoder.CrossEncoder'):
-            reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
-            assert reranker is not None
+        reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+        assert reranker is not None
+        assert reranker.model_name == "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+    def test_cross_encoder_reranker_default_model(self):
+        """Test CrossEncoderReranker uses default model."""
+        from src.retrieval.reranking.cross_encoder import CrossEncoderReranker
+
+        reranker = CrossEncoderReranker()
+        assert reranker.model_name == CrossEncoderReranker.DEFAULT_MODEL
 
     @pytest.mark.asyncio
-    async def test_cross_encoder_reranker_rerank(self):
+    async def test_cross_encoder_reranker_rerank(self, sample_results):
         """Test CrossEncoderReranker rerank method."""
         from src.retrieval.reranking.cross_encoder import CrossEncoderReranker
 
         mock_model = MagicMock()
         mock_model.predict = MagicMock(return_value=[0.9, 0.7, 0.5])
 
-        with patch('src.retrieval.reranking.cross_encoder.CrossEncoder', return_value=mock_model):
+        with patch.object(CrossEncoderReranker, '_get_model', return_value=mock_model):
             reranker = CrossEncoderReranker()
-
-            results = await reranker.rerank(
+            result = await reranker.rerank(
                 query="test query",
-                documents=[
-                    {"id": "doc-1", "content": "First"},
-                    {"id": "doc-2", "content": "Second"},
-                    {"id": "doc-3", "content": "Third"},
-                ],
+                results=sample_results,
                 top_k=2,
             )
-            assert len(results) <= 2
+
+            assert isinstance(result, RerankResult)
+            assert result.reranked_count <= 2
+
+    @pytest.mark.asyncio
+    async def test_cross_encoder_reranker_empty_results(self):
+        """Test CrossEncoderReranker with empty results."""
+        from src.retrieval.reranking.cross_encoder import CrossEncoderReranker
+
+        reranker = CrossEncoderReranker()
+        result = await reranker.rerank(
+            query="test",
+            results=[],
+            top_k=5,
+        )
+
+        assert result.original_count == 0
+        assert result.reranked_count == 0
 
 
 class TestCohereReranker:
@@ -116,14 +218,41 @@ class TestCohereReranker:
         """Test CohereReranker can be created."""
         from src.retrieval.reranking.cross_encoder import CohereReranker
 
-        with patch.dict('os.environ', {'COHERE_API_KEY': 'test-key'}):
-            reranker = CohereReranker()
-            assert reranker is not None
+        reranker = CohereReranker(api_key="test-key")
+        assert reranker is not None
+        assert reranker.model == "rerank-english-v3.0"
+
+    def test_cohere_reranker_custom_model(self):
+        """Test CohereReranker with custom model."""
+        from src.retrieval.reranking.cross_encoder import CohereReranker
+
+        reranker = CohereReranker(api_key="test-key", model="rerank-multilingual-v3.0")
+        assert reranker.model == "rerank-multilingual-v3.0"
+
+    @pytest.mark.asyncio
+    async def test_cohere_reranker_empty_results(self):
+        """Test CohereReranker with empty results."""
+        from src.retrieval.reranking.cross_encoder import CohereReranker
+
+        reranker = CohereReranker(api_key="test-key")
+        result = await reranker.rerank(
+            query="test",
+            results=[],
+            top_k=5,
+        )
+
+        assert result.original_count == 0
+        assert result.reranked_count == 0
 
     @pytest.mark.asyncio
     async def test_cohere_reranker_rerank(self):
         """Test CohereReranker rerank method."""
         from src.retrieval.reranking.cross_encoder import CohereReranker
+
+        sample_results = [
+            SearchResult(chunk_id="c1", document_id="d1", content="First", score=0.8, metadata={}),
+            SearchResult(chunk_id="c2", document_id="d1", content="Second", score=0.7, metadata={}),
+        ]
 
         mock_response = MagicMock()
         mock_response.results = [
@@ -131,44 +260,16 @@ class TestCohereReranker:
             MagicMock(index=1, relevance_score=0.85),
         ]
 
-        with patch.dict('os.environ', {'COHERE_API_KEY': 'test-key'}):
-            reranker = CohereReranker()
+        mock_client = MagicMock()
+        mock_client.rerank = MagicMock(return_value=mock_response)
 
-            with patch.object(reranker, 'client') as mock_client:
-                mock_client.rerank = AsyncMock(return_value=mock_response)
+        with patch.object(CohereReranker, '_get_client', return_value=mock_client):
+            reranker = CohereReranker(api_key="test-key")
+            result = await reranker.rerank(
+                query="test",
+                results=sample_results,
+                top_k=2,
+            )
 
-                results = await reranker.rerank(
-                    query="test",
-                    documents=[
-                        {"id": "doc-1", "content": "First"},
-                        {"id": "doc-2", "content": "Second"},
-                    ],
-                    top_k=2,
-                )
-
-
-class TestRerankResult:
-    """Tests for the RerankResult model."""
-
-    def test_rerank_result_creation(self):
-        """Test RerankResult can be created."""
-        from src.retrieval.reranking.base import RerankResult
-
-        result = RerankResult(
-            id="doc-1",
-            content="Document content",
-            original_score=0.8,
-            rerank_score=0.95,
-        )
-        assert result.id == "doc-1"
-        assert result.rerank_score == 0.95
-
-    def test_rerank_result_comparison(self):
-        """Test RerankResult can be compared by score."""
-        from src.retrieval.reranking.base import RerankResult
-
-        result1 = RerankResult(id="doc-1", content="", original_score=0.8, rerank_score=0.95)
-        result2 = RerankResult(id="doc-2", content="", original_score=0.9, rerank_score=0.85)
-
-        # result1 should rank higher due to rerank_score
-        assert result1.rerank_score > result2.rerank_score
+            assert isinstance(result, RerankResult)
+            assert result.reranked_count == 2

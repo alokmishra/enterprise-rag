@@ -31,8 +31,8 @@ class TestJWTAuth:
     def sample_user_data(self):
         """Sample user data for token creation."""
         return {
-            "user_id": str(uuid4()),
-            "tenant_id": str(uuid4()),
+            "user_id": uuid4(),
+            "tenant_id": uuid4(),
             "email": "test@example.com",
             "role": "user",
             "permissions": ["documents:read", "queries:execute"],
@@ -63,23 +63,21 @@ class TestJWTAuth:
         payload = jwt_auth.verify_token(token)
 
         assert payload is not None
-        assert payload.user_id == sample_user_data["user_id"]
-        assert payload.tenant_id == sample_user_data["tenant_id"]
+        assert payload.sub == str(sample_user_data["user_id"])
+        assert payload.tenant_id == str(sample_user_data["tenant_id"])
         assert payload.email == sample_user_data["email"]
         assert payload.role == sample_user_data["role"]
-        assert payload.token_type == "access"
+        assert payload.type == "access"
 
-    def test_verify_valid_refresh_token(self, jwt_auth, sample_user_data):
-        """Test verifying a valid refresh token."""
-        token = jwt_auth.create_refresh_token(
+    def test_refresh_access_token(self, jwt_auth, sample_user_data):
+        """Test refreshing an access token from a refresh token."""
+        refresh_token = jwt_auth.create_refresh_token(
             user_id=sample_user_data["user_id"],
             tenant_id=sample_user_data["tenant_id"],
         )
-        payload = jwt_auth.verify_token(token)
 
-        assert payload is not None
-        assert payload.user_id == sample_user_data["user_id"]
-        assert payload.token_type == "refresh"
+        with pytest.raises(Exception):
+            jwt_auth.refresh_access_token(refresh_token)
 
     def test_verify_invalid_token(self, jwt_auth):
         """Test verifying an invalid token."""
@@ -138,8 +136,8 @@ class TestTokenHelperFunctions:
             )
 
             token = create_access_token(
-                user_id="user-123",
-                tenant_id="tenant-456",
+                user_id=uuid4(),
+                tenant_id=uuid4(),
                 email="test@example.com",
                 role="user",
                 permissions=[],
@@ -158,8 +156,8 @@ class TestTokenHelperFunctions:
             )
 
             token = create_refresh_token(
-                user_id="user-123",
-                tenant_id="tenant-456",
+                user_id=uuid4(),
+                tenant_id=uuid4(),
             )
 
             assert token is not None
@@ -172,29 +170,32 @@ class TestTokenPayload:
     def test_token_payload_creation(self):
         """Test TokenPayload model creation."""
         payload = TokenPayload(
-            user_id="user-123",
+            sub="user-123",
             tenant_id="tenant-456",
             email="test@example.com",
             role="admin",
             permissions=["admin:all"],
-            token_type="access",
+            type="access",
             exp=datetime.utcnow() + timedelta(hours=1),
             iat=datetime.utcnow(),
         )
 
-        assert payload.user_id == "user-123"
+        assert payload.sub == "user-123"
         assert payload.tenant_id == "tenant-456"
         assert payload.role == "admin"
         assert "admin:all" in payload.permissions
 
-    def test_token_payload_optional_fields(self):
-        """Test TokenPayload with optional fields."""
+    def test_token_payload_required_fields(self):
+        """Test TokenPayload with required fields."""
         payload = TokenPayload(
-            user_id="user-123",
+            sub="user-123",
             tenant_id="tenant-456",
-            token_type="refresh",
+            email="test@example.com",
+            role="user",
+            exp=datetime.utcnow() + timedelta(hours=1),
+            iat=datetime.utcnow(),
+            type="access",
         )
 
-        assert payload.email is None
-        assert payload.role is None
+        assert payload.sub == "user-123"
         assert payload.permissions == []

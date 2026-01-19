@@ -7,6 +7,8 @@ This module handles response generation:
 - Streaming responses
 """
 
+from __future__ import annotations
+
 from src.generation.llm import (
     LLMClient,
     LLMMessage,

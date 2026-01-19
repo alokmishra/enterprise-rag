@@ -20,10 +20,19 @@ class TestRedisCache:
         client.delete = AsyncMock(return_value=1)
         client.exists = AsyncMock(return_value=1)
         client.expire = AsyncMock(return_value=True)
-        client.keys = AsyncMock(return_value=[])
         client.ping = AsyncMock(return_value=True)
-        client.close = AsyncMock()
+        client.aclose = AsyncMock()
+        client.incrby = AsyncMock(return_value=1)
+        client.flushdb = AsyncMock()
+        client.scan_iter = MagicMock(return_value=AsyncMock(__aiter__=lambda s: s, __anext__=AsyncMock(side_effect=StopAsyncIteration)))
         return client
+
+    @pytest.fixture
+    def mock_connection_pool(self):
+        """Create a mock connection pool."""
+        pool = MagicMock()
+        pool.disconnect = AsyncMock()
+        return pool
 
     def test_redis_cache_initialization(self):
         """Test RedisCache can be initialized."""
@@ -31,16 +40,19 @@ class TestRedisCache:
 
         cache = RedisCache(url="redis://localhost:6379/0")
         assert cache is not None
+        assert cache._url == "redis://localhost:6379/0"
 
     @pytest.mark.asyncio
-    async def test_redis_cache_connect(self, mock_redis_client):
+    async def test_redis_cache_connect(self, mock_redis_client, mock_connection_pool):
         """Test RedisCache connect method."""
         from src.storage.cache.redis import RedisCache
 
-        with patch('src.storage.cache.redis.aioredis.from_url', return_value=mock_redis_client):
-            cache = RedisCache(url="redis://localhost:6379/0")
-            await cache.connect()
-            # Should establish connection
+        with patch('src.storage.cache.redis.ConnectionPool.from_url', return_value=mock_connection_pool):
+            with patch('src.storage.cache.redis.redis.Redis', return_value=mock_redis_client):
+                cache = RedisCache(url="redis://localhost:6379/0")
+                await cache.connect()
+                assert cache.is_connected
+                mock_redis_client.ping.assert_called()
 
     @pytest.mark.asyncio
     async def test_redis_cache_get_returns_none_for_missing_key(self, mock_redis_client):
@@ -50,7 +62,7 @@ class TestRedisCache:
         mock_redis_client.get = AsyncMock(return_value=None)
 
         cache = RedisCache(url="redis://localhost:6379/0")
-        cache.client = mock_redis_client
+        cache._client = mock_redis_client
 
         result = await cache.get("missing_key")
         assert result is None
@@ -61,10 +73,10 @@ class TestRedisCache:
         from src.storage.cache.redis import RedisCache
 
         cached_data = {"key": "value"}
-        mock_redis_client.get = AsyncMock(return_value=json.dumps(cached_data).encode())
+        mock_redis_client.get = AsyncMock(return_value=json.dumps(cached_data))
 
         cache = RedisCache(url="redis://localhost:6379/0")
-        cache.client = mock_redis_client
+        cache._client = mock_redis_client
 
         result = await cache.get("existing_key")
         assert result == cached_data
@@ -75,7 +87,7 @@ class TestRedisCache:
         from src.storage.cache.redis import RedisCache
 
         cache = RedisCache(url="redis://localhost:6379/0")
-        cache.client = mock_redis_client
+        cache._client = mock_redis_client
 
         await cache.set("test_key", {"data": "value"}, ttl=3600)
         mock_redis_client.set.assert_called()
@@ -86,10 +98,10 @@ class TestRedisCache:
         from src.storage.cache.redis import RedisCache
 
         cache = RedisCache(url="redis://localhost:6379/0")
-        cache.client = mock_redis_client
+        cache._client = mock_redis_client
 
         await cache.set("test_key", "value", ttl=3600)
-        # Should set with expiration
+        mock_redis_client.set.assert_called_with("test_key", "value", ex=3600)
 
     @pytest.mark.asyncio
     async def test_redis_cache_delete(self, mock_redis_client):
@@ -97,23 +109,24 @@ class TestRedisCache:
         from src.storage.cache.redis import RedisCache
 
         cache = RedisCache(url="redis://localhost:6379/0")
-        cache.client = mock_redis_client
+        cache._client = mock_redis_client
 
-        await cache.delete("test_key")
+        result = await cache.delete("test_key")
         mock_redis_client.delete.assert_called_with("test_key")
+        assert result is True
 
     @pytest.mark.asyncio
-    async def test_redis_cache_delete_pattern(self, mock_redis_client):
-        """Test RedisCache delete by pattern."""
+    async def test_redis_cache_exists(self, mock_redis_client):
+        """Test RedisCache exists method."""
         from src.storage.cache.redis import RedisCache
 
-        mock_redis_client.keys = AsyncMock(return_value=[b"prefix:key1", b"prefix:key2"])
+        mock_redis_client.exists = AsyncMock(return_value=1)
 
         cache = RedisCache(url="redis://localhost:6379/0")
-        cache.client = mock_redis_client
+        cache._client = mock_redis_client
 
-        if hasattr(cache, 'delete_pattern'):
-            await cache.delete_pattern("prefix:*")
+        result = await cache.exists("test_key")
+        assert result is True
 
     @pytest.mark.asyncio
     async def test_redis_cache_health_check(self, mock_redis_client):
@@ -123,39 +136,74 @@ class TestRedisCache:
         mock_redis_client.ping = AsyncMock(return_value=True)
 
         cache = RedisCache(url="redis://localhost:6379/0")
-        cache.client = mock_redis_client
+        cache._client = mock_redis_client
 
-        is_healthy = await cache.health_check()
-        assert is_healthy is True
+        result = await cache.health_check()
+        assert result["status"] == "healthy"
+        assert "latency_ms" in result
 
     @pytest.mark.asyncio
-    async def test_redis_cache_disconnect(self, mock_redis_client):
+    async def test_redis_cache_health_check_disconnected(self):
+        """Test RedisCache health_check when disconnected."""
+        from src.storage.cache.redis import RedisCache
+
+        cache = RedisCache(url="redis://localhost:6379/0")
+
+        result = await cache.health_check()
+        assert result["status"] == "disconnected"
+
+    @pytest.mark.asyncio
+    async def test_redis_cache_disconnect(self, mock_redis_client, mock_connection_pool):
         """Test RedisCache disconnect method."""
         from src.storage.cache.redis import RedisCache
 
         cache = RedisCache(url="redis://localhost:6379/0")
-        cache.client = mock_redis_client
+        cache._client = mock_redis_client
+        cache._pool = mock_connection_pool
 
         await cache.disconnect()
-        mock_redis_client.close.assert_called()
+        mock_redis_client.aclose.assert_called()
+        mock_connection_pool.disconnect.assert_called()
+        assert cache._client is None
 
-
-class TestRedisCacheKeyGeneration:
-    """Tests for Redis cache key generation."""
-
-    def test_cache_key_prefix(self):
-        """Test that cache keys use proper prefix."""
+    @pytest.mark.asyncio
+    async def test_redis_cache_clear(self, mock_redis_client):
+        """Test RedisCache clear method."""
         from src.storage.cache.redis import RedisCache
 
-        cache = RedisCache(url="redis://localhost:6379/0", prefix="rag")
-        # Key generation should include prefix
-        assert cache.prefix == "rag"
+        cache = RedisCache(url="redis://localhost:6379/0")
+        cache._client = mock_redis_client
 
-    def test_cache_key_format(self):
-        """Test cache key format."""
+        await cache.clear()
+        mock_redis_client.flushdb.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_redis_cache_incr(self, mock_redis_client):
+        """Test RedisCache incr method."""
         from src.storage.cache.redis import RedisCache
 
-        cache = RedisCache(url="redis://localhost:6379/0", prefix="rag")
-        if hasattr(cache, '_make_key'):
-            key = cache._make_key("query", "abc123")
-            assert "rag" in key
+        mock_redis_client.incrby = AsyncMock(return_value=5)
+
+        cache = RedisCache(url="redis://localhost:6379/0")
+        cache._client = mock_redis_client
+
+        result = await cache.incr("counter", 1)
+        assert result == 5
+
+
+class TestRedisCacheFactory:
+    """Tests for Redis cache factory functions."""
+
+    def test_get_cache_returns_singleton(self):
+        """Test that get_cache returns the same instance."""
+        from src.storage.cache.redis import get_cache, RedisCache
+        import src.storage.cache.redis as redis_module
+
+        redis_module._cache = None
+
+        cache1 = get_cache()
+        cache2 = get_cache()
+        assert cache1 is cache2
+        assert isinstance(cache1, RedisCache)
+
+        redis_module._cache = None

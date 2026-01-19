@@ -2,6 +2,8 @@
 Enterprise RAG System - Search Module
 """
 
+from __future__ import annotations
+
 from src.retrieval.search.vector import (
     VectorSearcher,
     MultiQuerySearcher,

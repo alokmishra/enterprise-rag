@@ -2,6 +2,8 @@
 Enterprise RAG System - API Key Authentication
 """
 
+from __future__ import annotations
+
 import hashlib
 import secrets
 from datetime import datetime

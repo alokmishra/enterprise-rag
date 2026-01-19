@@ -9,6 +9,8 @@ This module handles document retrieval:
 - Context assembly
 """
 
+from __future__ import annotations
+
 from src.retrieval.search import (
     VectorSearcher,
     MultiQuerySearcher,

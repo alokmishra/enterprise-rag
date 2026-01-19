@@ -2,6 +2,8 @@
 Enterprise RAG System - Document Repository
 """
 
+from __future__ import annotations
+
 from typing import Any, Optional
 from uuid import uuid4
 

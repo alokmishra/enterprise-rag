@@ -2,6 +2,8 @@
 Enterprise RAG System - DOCX Document Processor
 """
 
+from __future__ import annotations
+
 import io
 from pathlib import Path
 from typing import Any, BinaryIO, Optional, Union

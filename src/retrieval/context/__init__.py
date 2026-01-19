@@ -2,6 +2,8 @@
 Enterprise RAG System - Context Assembly Module
 """
 
+from __future__ import annotations
+
 from src.retrieval.context.assembler import (
     ContextAssembler,
     AssembledContext,

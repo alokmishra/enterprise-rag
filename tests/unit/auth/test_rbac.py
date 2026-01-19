@@ -22,8 +22,8 @@ class TestPermission:
         assert Permission.DOCUMENTS_DELETE
         assert Permission.QUERIES_EXECUTE
         assert Permission.ADMIN_SETTINGS
-        assert Permission.ADMIN_USERS
-        assert Permission.ADMIN_TENANTS
+        assert Permission.USERS_READ
+        assert Permission.TENANTS_READ
 
     def test_permission_string_values(self):
         """Test permission string representations."""
@@ -83,7 +83,7 @@ class TestRBACManager:
         assert rbac_manager.has_permission(Role.ADMIN, Permission.DOCUMENTS_WRITE)
         assert rbac_manager.has_permission(Role.ADMIN, Permission.DOCUMENTS_DELETE)
         assert rbac_manager.has_permission(Role.ADMIN, Permission.ADMIN_SETTINGS)
-        assert rbac_manager.has_permission(Role.ADMIN, Permission.ADMIN_USERS)
+        assert rbac_manager.has_permission(Role.ADMIN, Permission.USERS_READ)
 
     def test_super_admin_permissions(self, rbac_manager):
         """Test super admin has all permissions."""
@@ -108,12 +108,27 @@ class TestRBACManager:
         admin_perms = rbac_manager.get_role_permissions(Role.ADMIN)
         assert len(admin_perms) > len(viewer_perms)
 
-    def test_role_hierarchy_check(self, rbac_manager):
-        """Test role hierarchy comparison."""
-        assert rbac_manager.is_role_at_least(Role.ADMIN, Role.USER)
-        assert rbac_manager.is_role_at_least(Role.SUPER_ADMIN, Role.ADMIN)
-        assert rbac_manager.is_role_at_least(Role.USER, Role.USER)
-        assert not rbac_manager.is_role_at_least(Role.VIEWER, Role.USER)
+    def test_has_any_permission(self, rbac_manager):
+        """Test checking for any of multiple permissions."""
+        assert rbac_manager.has_any_permission(
+            Role.VIEWER,
+            [Permission.DOCUMENTS_READ, Permission.DOCUMENTS_WRITE],
+        )
+        assert not rbac_manager.has_any_permission(
+            Role.VIEWER,
+            [Permission.DOCUMENTS_WRITE, Permission.DOCUMENTS_DELETE],
+        )
+
+    def test_has_all_permissions(self, rbac_manager):
+        """Test checking for all of multiple permissions."""
+        assert rbac_manager.has_all_permissions(
+            Role.EDITOR,
+            [Permission.DOCUMENTS_READ, Permission.DOCUMENTS_WRITE],
+        )
+        assert not rbac_manager.has_all_permissions(
+            Role.EDITOR,
+            [Permission.DOCUMENTS_WRITE, Permission.ADMIN_SETTINGS],
+        )
 
 
 class TestRequirePermissionDecorator:

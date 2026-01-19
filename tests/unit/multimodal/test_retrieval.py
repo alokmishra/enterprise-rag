@@ -1,22 +1,22 @@
 """Tests for multi-modal retrieval."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from dataclasses import dataclass
 
+import pytest
+
+from src.ingestion.multimodal.base import ModalityType, MultiModalContent
+from src.retrieval.multimodal.fusion import (
+    FusionConfig,
+    FusionStrategy,
+    MultiModalFusion,
+)
 from src.retrieval.multimodal.search import (
-    MultiModalSearcher,
     MultiModalQuery,
-    MultiModalSearchResult,
+    MultiModalSearcher,
     MultiModalSearchResponse,
+    MultiModalSearchResult,
     SearchModality,
 )
-from src.retrieval.multimodal.fusion import (
-    MultiModalFusion,
-    FusionStrategy,
-    FusionConfig,
-)
-from src.ingestion.multimodal.base import ModalityType, MultiModalContent
 
 
 class TestMultiModalQuery:
@@ -360,6 +360,7 @@ class TestMultiModalFusion:
         """Test max score fusion."""
         fusion = MultiModalFusion(FusionConfig(
             strategy=FusionStrategy.MAX_SCORE,
+            normalize_scores=False,  # Disable normalization for this test
         ))
 
         results_by_modality = {

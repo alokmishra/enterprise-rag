@@ -16,7 +16,8 @@ class TestSynthesizerAgent:
         client = AsyncMock()
         client.generate = AsyncMock(return_value=MagicMock(
             content="Based on the provided context, here is the answer...",
-            tokens_used=150,
+            model="gpt-4",
+            total_tokens=150,
         ))
         return client
 
@@ -50,8 +51,8 @@ class TestSynthesizerAgent:
             result = await agent.execute(sample_agent_state)
 
             if result.success and result.output:
-                response = result.output.get("response", result.output)
-                assert len(str(response)) > 0
+                response = result.output.content if hasattr(result.output, 'content') else str(result.output)
+                assert len(response) > 0
 
     @pytest.mark.asyncio
     async def test_synthesizer_uses_context(self, mock_llm_client, sample_agent_state):

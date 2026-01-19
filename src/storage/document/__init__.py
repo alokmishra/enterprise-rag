@@ -2,6 +2,8 @@
 Enterprise RAG System - Document Storage Module
 """
 
+from __future__ import annotations
+
 from src.storage.document.database import (
     Database,
     DatabaseError,

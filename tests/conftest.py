@@ -219,8 +219,9 @@ def sample_agent_state_with_response(sample_agent_state):
 def test_client():
     """Create a test client for the FastAPI app."""
     from fastapi.testclient import TestClient
-    from src.app import app
+    from src.app import create_app
 
+    app = create_app()
     return TestClient(app)
 
 
@@ -228,8 +229,9 @@ def test_client():
 async def async_test_client():
     """Create an async test client."""
     from httpx import AsyncClient, ASGITransport
-    from src.app import app
+    from src.app import create_app
 
+    app = create_app()
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test"

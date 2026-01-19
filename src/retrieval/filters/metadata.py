@@ -4,6 +4,8 @@ Enterprise RAG System - Metadata Filters
 Provides a flexible filtering system for metadata-based retrieval filtering.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum

@@ -5,6 +5,8 @@ The Formatter Agent transforms responses into the requested
 output format with consistent styling.
 """
 
+from __future__ import annotations
+
 import json
 import re
 import time

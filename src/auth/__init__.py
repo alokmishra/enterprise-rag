@@ -8,6 +8,8 @@ Provides:
 - Multi-tenancy support
 """
 
+from __future__ import annotations
+
 from src.auth.jwt import (
     JWTAuth,
     create_access_token,

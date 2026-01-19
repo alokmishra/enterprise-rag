@@ -1,4 +1,6 @@
 # Multi-modal retrieval
+from __future__ import annotations
+
 from src.retrieval.multimodal.search import (
     MultiModalSearcher,
     MultiModalQuery,

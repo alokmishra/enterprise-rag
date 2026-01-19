@@ -2,6 +2,8 @@
 Enterprise RAG System - Shared Type Definitions
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
@@ -218,6 +220,7 @@ class AgentState(BaseModel):
     critic_feedback: list[dict[str, Any]] = Field(default_factory=list)
     iteration_count: int = 0
     token_budget_remaining: int = 0
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class VerificationResult(BaseModel):

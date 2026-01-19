@@ -2,9 +2,11 @@
 Enterprise RAG System - Distributed Tracing (OpenTelemetry)
 """
 
+from __future__ import annotations
+
 import functools
 from contextlib import contextmanager
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -81,7 +83,7 @@ class TracingManager:
     def span(
         self,
         name: str,
-        attributes: Optional[dict[str, Any]] = None,
+        attributes: Optional[Dict[str, Any]] = None,
     ):
         """
         Create a tracing span.
@@ -163,7 +165,7 @@ def get_tracer() -> trace.Tracer:
 @contextmanager
 def create_span(
     name: str,
-    attributes: Optional[dict[str, Any]] = None,
+    attributes: Optional[Dict[str, Any]] = None,
 ):
     """
     Create a tracing span.

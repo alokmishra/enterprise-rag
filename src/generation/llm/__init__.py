@@ -2,6 +2,8 @@
 Enterprise RAG System - LLM Module
 """
 
+from __future__ import annotations
+
 from src.generation.llm.base import (
     LLMClient,
     LLMMessage,

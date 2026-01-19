@@ -2,6 +2,8 @@
 Enterprise RAG System - Vector Search Implementation
 """
 
+from __future__ import annotations
+
 from typing import Any, Optional
 
 from src.core.config import settings

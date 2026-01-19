@@ -2,8 +2,10 @@
 Enterprise RAG System - Database Models
 """
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional, TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
@@ -70,7 +72,7 @@ class DocumentModel(Base):
     )
 
     # Relationships
-    chunks: Mapped[list["ChunkModel"]] = relationship(
+    chunks: Mapped[List["ChunkModel"]] = relationship(
         "ChunkModel",
         back_populates="document",
         cascade="all, delete-orphan",

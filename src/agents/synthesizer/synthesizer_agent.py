@@ -5,6 +5,8 @@ The Synthesizer Agent generates coherent responses from retrieved context.
 It handles the core response generation using an LLM.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any, Optional
 

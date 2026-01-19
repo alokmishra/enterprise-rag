@@ -2,6 +2,8 @@
 Enterprise RAG System - OpenAI LLM Client
 """
 
+from __future__ import annotations
+
 from typing import Any, AsyncIterator, Optional
 
 from openai import AsyncOpenAI

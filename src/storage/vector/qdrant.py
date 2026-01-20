@@ -165,8 +165,18 @@ class QdrantVectorStore(VectorStore[QdrantSearchResult]):
         ids: list[str],
         vectors: list[list[float]],
         payloads: Optional[list[dict[str, Any]]] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
-        """Insert vectors into a collection."""
+        """
+        Insert vectors into a collection.
+
+        Args:
+            collection: Collection name
+            ids: Vector IDs
+            vectors: Vector embeddings
+            payloads: Optional payloads for each vector
+            tenant_id: Optional tenant ID to add to payload for filtering
+        """
         client = self._ensure_connected()
 
         if len(ids) != len(vectors):
@@ -175,6 +185,13 @@ class QdrantVectorStore(VectorStore[QdrantSearchResult]):
         payloads = payloads or [{} for _ in ids]
         if len(payloads) != len(ids):
             raise VectorStoreError("Payloads must have same length as IDs")
+
+        # Add tenant_id to payloads if provided
+        if tenant_id:
+            payloads = [
+                {**payload, "tenant_id": tenant_id}
+                for payload in payloads
+            ]
 
         points = [
             models.PointStruct(
@@ -195,6 +212,7 @@ class QdrantVectorStore(VectorStore[QdrantSearchResult]):
                 "Inserted vectors",
                 collection=collection,
                 count=len(points),
+                tenant_id=tenant_id,
             )
         except Exception as e:
             raise VectorStoreError(f"Failed to insert vectors: {e}")
@@ -205,14 +223,32 @@ class QdrantVectorStore(VectorStore[QdrantSearchResult]):
         query_vector: list[float],
         top_k: int = 10,
         filters: Optional[dict[str, Any]] = None,
+        tenant_id: Optional[str] = None,
     ) -> list[QdrantSearchResult]:
-        """Search for similar vectors."""
+        """
+        Search for similar vectors.
+
+        Args:
+            collection: Collection name
+            query_vector: Query embedding vector
+            top_k: Number of results to return
+            filters: Optional filters to apply
+            tenant_id: Optional tenant ID to filter by
+
+        Returns:
+            List of search results
+        """
         client = self._ensure_connected()
+
+        # Merge tenant_id with filters
+        combined_filters = filters.copy() if filters else {}
+        if tenant_id:
+            combined_filters["tenant_id"] = tenant_id
 
         # Build filter if provided
         query_filter = None
-        if filters:
-            query_filter = self._build_filter(filters)
+        if combined_filters:
+            query_filter = self._build_filter(combined_filters)
 
         try:
             results = await client.search(

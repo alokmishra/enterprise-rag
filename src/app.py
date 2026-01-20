@@ -16,6 +16,7 @@ from src.api.routes import query, documents, admin, health
 from src.api.middleware.error_handler import error_handler_middleware
 from src.api.middleware.logging import logging_middleware
 from src.api.middleware.rate_limit import rate_limit_middleware
+from src.api.middleware.tenant import tenant_context_middleware
 from src.storage import (
     init_database,
     close_database,
@@ -88,8 +89,10 @@ def create_app() -> FastAPI:
     )
     
     # Add custom middleware (order matters: last added runs first)
+    # Execution order: logging -> tenant_context -> rate_limit -> error_handler
     app.middleware("http")(error_handler_middleware)
     app.middleware("http")(rate_limit_middleware)
+    app.middleware("http")(tenant_context_middleware)
     app.middleware("http")(logging_middleware)
     
     # Include routers

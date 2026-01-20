@@ -7,13 +7,14 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.core.logging import get_logger
 from src.core.types import QueryComplexity, RetrievalStrategy
 from src.api.services.rag_pipeline import get_rag_pipeline
+from src.api.middleware.tenant import get_tenant_id
 from src.agents import Orchestrator, OrchestratorConfig, StreamingOrchestrator, OutputFormat
 from src.storage import get_database, QueryLogRepository
 
@@ -84,7 +85,10 @@ class FeedbackRequest(BaseModel):
 # =============================================================================
 
 @router.post("/query", response_model=QueryResponse)
-async def query(request: QueryRequest):
+async def query(
+    request: QueryRequest,
+    tenant_id: str = Depends(get_tenant_id),
+):
     """
     Execute a RAG query.
 
@@ -98,7 +102,7 @@ async def query(request: QueryRequest):
     Returns a response with source citations.
     """
     try:
-        pipeline = get_rag_pipeline()
+        pipeline = get_rag_pipeline(tenant_id=tenant_id)
 
         result = await pipeline.query(
             question=request.query,
@@ -130,7 +134,7 @@ async def query(request: QueryRequest):
         # Persist query to database
         try:
             async for session in get_database().session():
-                repo = QueryLogRepository(session)
+                repo = QueryLogRepository(session, tenant_id=tenant_id)
                 await repo.create(
                     query=result.query,
                     answer=result.answer,
@@ -143,7 +147,7 @@ async def query(request: QueryRequest):
                 await session.commit()
         except Exception as persist_error:
             # Log but don't fail the request if persistence fails
-            logger.warning("Failed to persist query", error=str(persist_error))
+            logger.warning("Failed to persist query", error=str(persist_error), tenant_id=tenant_id)
 
         return QueryResponse(
             query_id=result.query_id,
@@ -165,7 +169,10 @@ async def query(request: QueryRequest):
 
 
 @router.post("/query/stream")
-async def query_stream(request: QueryRequest):
+async def query_stream(
+    request: QueryRequest,
+    tenant_id: str = Depends(get_tenant_id),
+):
     """
     Execute a RAG query with streaming response.
 
@@ -180,7 +187,7 @@ async def query_stream(request: QueryRequest):
 
     async def generate():
         try:
-            pipeline = get_rag_pipeline()
+            pipeline = get_rag_pipeline(tenant_id=tenant_id)
 
             async for chunk in pipeline.query_stream(
                 question=request.query,
@@ -190,7 +197,7 @@ async def query_stream(request: QueryRequest):
                 yield f"data: {json.dumps(chunk)}\n\n"
 
         except Exception as e:
-            logger.error("Streaming query failed", error=str(e))
+            logger.error("Streaming query failed", error=str(e), tenant_id=tenant_id)
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(
@@ -200,7 +207,11 @@ async def query_stream(request: QueryRequest):
 
 
 @router.post("/query/{query_id}/feedback")
-async def submit_feedback(query_id: str, request: FeedbackRequest):
+async def submit_feedback(
+    query_id: str,
+    request: FeedbackRequest,
+    tenant_id: str = Depends(get_tenant_id),
+):
     """
     Submit feedback for a query response.
 
@@ -216,12 +227,12 @@ async def submit_feedback(query_id: str, request: FeedbackRequest):
     db = get_database()
     if not db.is_connected:
         # Graceful degradation - accept feedback without persisting
-        logger.warning("Database not connected, feedback not persisted", query_id=query_id)
+        logger.warning("Database not connected, feedback not persisted", query_id=query_id, tenant_id=tenant_id)
         return {"status": "accepted", "message": "Feedback received (not persisted)", "query_id": query_id}
 
     try:
         async for session in db.session():
-            repo = QueryLogRepository(session)
+            repo = QueryLogRepository(session, tenant_id=tenant_id)
 
             # Check if query exists
             query_log = await repo.get(query_id)
@@ -279,7 +290,10 @@ class QueryDetailResponse(BaseModel):
 
 
 @router.get("/query/{query_id}", response_model=QueryDetailResponse)
-async def get_query(query_id: str):
+async def get_query(
+    query_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+):
     """
     Get details of a previous query.
 
@@ -287,7 +301,7 @@ async def get_query(query_id: str):
     """
     try:
         async for session in get_database().session():
-            repo = QueryLogRepository(session)
+            repo = QueryLogRepository(session, tenant_id=tenant_id)
             query_log = await repo.get(query_id)
 
             if query_log is None:
@@ -326,7 +340,10 @@ class QueryTraceResponse(BaseModel):
 
 
 @router.get("/query/{query_id}/trace", response_model=QueryTraceResponse)
-async def get_query_trace(query_id: str):
+async def get_query_trace(
+    query_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+):
     """
     Get the execution trace for a query.
 
@@ -335,7 +352,7 @@ async def get_query_trace(query_id: str):
     """
     try:
         async for session in get_database().session():
-            repo = QueryLogRepository(session)
+            repo = QueryLogRepository(session, tenant_id=tenant_id)
             query_log = await repo.get(query_id)
 
             if query_log is None:
@@ -393,7 +410,10 @@ class AgentQueryResponse(BaseModel):
 
 
 @router.post("/query/agent", response_model=AgentQueryResponse)
-async def agent_query(request: AgentQueryRequest):
+async def agent_query(
+    request: AgentQueryRequest,
+    tenant_id: str = Depends(get_tenant_id),
+):
     """
     Execute a query using the multi-agent RAG system.
 
@@ -426,7 +446,7 @@ async def agent_query(request: AgentQueryRequest):
             output_format=output_format,
         )
 
-        orchestrator = Orchestrator(config)
+        orchestrator = Orchestrator(config, tenant_id=tenant_id)
 
         # Execute query
         result = await orchestrator.execute(
@@ -437,7 +457,7 @@ async def agent_query(request: AgentQueryRequest):
         # Persist query to database with trace data
         try:
             async for session in get_database().session():
-                repo = QueryLogRepository(session)
+                repo = QueryLogRepository(session, tenant_id=tenant_id)
                 await repo.create(
                     query=request.query,
                     answer=result["response"],
@@ -448,7 +468,7 @@ async def agent_query(request: AgentQueryRequest):
                 )
                 await session.commit()
         except Exception as persist_error:
-            logger.warning("Failed to persist agent query", error=str(persist_error))
+            logger.warning("Failed to persist agent query", error=str(persist_error), tenant_id=tenant_id)
 
         return AgentQueryResponse(
             response=result["response"],
@@ -468,7 +488,10 @@ async def agent_query(request: AgentQueryRequest):
 
 
 @router.post("/query/agent/stream")
-async def agent_query_stream(request: AgentQueryRequest):
+async def agent_query_stream(
+    request: AgentQueryRequest,
+    tenant_id: str = Depends(get_tenant_id),
+):
     """
     Execute a multi-agent query with streaming response.
 
@@ -479,7 +502,7 @@ async def agent_query_stream(request: AgentQueryRequest):
     """
     async def generate():
         try:
-            orchestrator = StreamingOrchestrator()
+            orchestrator = StreamingOrchestrator(tenant_id=tenant_id)
 
             async for event in orchestrator.execute_streaming(
                 query=request.query,
@@ -488,7 +511,7 @@ async def agent_query_stream(request: AgentQueryRequest):
                 yield f"data: {json.dumps(event)}\n\n"
 
         except Exception as e:
-            logger.error("Streaming agent query failed", error=str(e))
+            logger.error("Streaming agent query failed", error=str(e), tenant_id=tenant_id)
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(

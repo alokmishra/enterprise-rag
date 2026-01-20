@@ -36,6 +36,7 @@ class HybridSearcher(LoggerMixin):
         bm25_index: Optional[BM25Index] = None,
         alpha: Optional[float] = None,
         rrf_k: int = 60,
+        tenant_id: Optional[str] = None,
     ):
         """
         Initialize hybrid searcher.
@@ -45,11 +46,13 @@ class HybridSearcher(LoggerMixin):
             bm25_index: BM25 index instance
             alpha: Weight for vector search (0-1). 1.0 = all vector, 0.0 = all BM25
             rrf_k: RRF constant (higher = less emphasis on top ranks)
+            tenant_id: Optional tenant ID for filtering
         """
-        self.vector_searcher = vector_searcher or VectorSearcher()
+        self.vector_searcher = vector_searcher or VectorSearcher(tenant_id=tenant_id)
         self.bm25_index = bm25_index or get_bm25_index()
         self.alpha = alpha if alpha is not None else settings.HYBRID_SEARCH_ALPHA
         self.rrf_k = rrf_k
+        self.tenant_id = tenant_id
 
     async def search(
         self,
@@ -58,6 +61,7 @@ class HybridSearcher(LoggerMixin):
         filters: Optional[dict[str, Any]] = None,
         alpha: Optional[float] = None,
         fusion_method: str = "rrf",  # "rrf" or "weighted"
+        tenant_id: Optional[str] = None,
     ) -> RetrievalResult:
         """
         Execute hybrid search.
@@ -68,6 +72,7 @@ class HybridSearcher(LoggerMixin):
             filters: Metadata filters (applied to vector search)
             alpha: Override weight for vector search
             fusion_method: "rrf" for Reciprocal Rank Fusion, "weighted" for score weighting
+            tenant_id: Optional tenant ID for filtering (overrides instance tenant_id)
 
         Returns:
             RetrievalResult with fused results
@@ -77,6 +82,7 @@ class HybridSearcher(LoggerMixin):
 
         top_k = top_k or settings.DEFAULT_TOP_K
         alpha = alpha if alpha is not None else self.alpha
+        effective_tenant_id = tenant_id or self.tenant_id
 
         # Retrieve more candidates for fusion
         candidate_k = min(top_k * 3, 50)
@@ -88,6 +94,7 @@ class HybridSearcher(LoggerMixin):
                 query=query,
                 top_k=candidate_k,
                 filters=filters,
+                tenant_id=effective_tenant_id,
             )
         )
 

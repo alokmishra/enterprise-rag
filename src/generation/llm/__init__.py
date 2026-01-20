@@ -12,7 +12,8 @@ from src.generation.llm.base import (
 )
 from src.generation.llm.anthropic import AnthropicClient, get_anthropic_client
 from src.generation.llm.openai import OpenAIClient, get_openai_client
-from src.generation.llm.factory import get_llm_client, get_default_llm_client
+from src.generation.llm.local import LocalLLMClient, get_local_llm_client, reset_local_llm_client
+from src.generation.llm.factory import get_llm_client, get_default_llm_client, reset_llm_client
 
 __all__ = [
     # Base
@@ -26,7 +27,12 @@ __all__ = [
     # OpenAI
     "OpenAIClient",
     "get_openai_client",
+    # Local
+    "LocalLLMClient",
+    "get_local_llm_client",
+    "reset_local_llm_client",
     # Factory
     "get_llm_client",
     "get_default_llm_client",
+    "reset_llm_client",
 ]

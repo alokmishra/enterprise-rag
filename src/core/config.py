@@ -143,6 +143,32 @@ class Settings(BaseSettings):
     FEATURE_KNOWLEDGE_GRAPH: bool = Field(default=True, description="Enable knowledge graph")
     FEATURE_MULTI_AGENT: bool = Field(default=True, description="Enable multi-agent")
     FEATURE_STREAMING: bool = Field(default=True, description="Enable streaming responses")
+
+    # -------------------------------------------------------------------------
+    # Deployment Configuration
+    # -------------------------------------------------------------------------
+    DEPLOYMENT_MODE: str = Field(
+        default="saas_multi_tenant",
+        description="Deployment mode: saas_multi_tenant, saas_dedicated, on_premise, air_gapped"
+    )
+    TENANT_ISOLATION: str = Field(
+        default="shared",
+        description="Tenant isolation: shared, schema, database, instance"
+    )
+
+    # -------------------------------------------------------------------------
+    # Local LLM Configuration
+    # -------------------------------------------------------------------------
+    LOCAL_LLM_ENABLED: bool = Field(default=False, description="Enable local LLM")
+    LOCAL_LLM_MODEL_PATH: Optional[str] = Field(default=None, description="Path to local LLM model")
+    LOCAL_LLM_MODEL_TYPE: str = Field(default="llama", description="Local LLM type: llama, mistral")
+    LOCAL_LLM_CONTEXT_LENGTH: int = Field(default=4096, description="Local LLM context length")
+    LOCAL_LLM_GPU_LAYERS: int = Field(default=0, description="GPU layers for local LLM")
+
+    # -------------------------------------------------------------------------
+    # Telemetry Configuration
+    # -------------------------------------------------------------------------
+    TELEMETRY_ENABLED: bool = Field(default=True, description="Enable telemetry")
     
     # -------------------------------------------------------------------------
     # Paths

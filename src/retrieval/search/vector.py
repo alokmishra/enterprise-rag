@@ -21,9 +21,11 @@ class VectorSearcher(LoggerMixin):
         self,
         collection_name: Optional[str] = None,
         top_k: Optional[int] = None,
+        tenant_id: Optional[str] = None,
     ):
         self.collection_name = collection_name or settings.QDRANT_COLLECTION_NAME
         self.top_k = top_k or settings.DEFAULT_TOP_K
+        self.tenant_id = tenant_id
 
     async def search(
         self,
@@ -31,6 +33,7 @@ class VectorSearcher(LoggerMixin):
         top_k: Optional[int] = None,
         filters: Optional[dict[str, Any]] = None,
         score_threshold: Optional[float] = None,
+        tenant_id: Optional[str] = None,
     ) -> RetrievalResult:
         """
         Search for documents similar to the query.
@@ -40,6 +43,7 @@ class VectorSearcher(LoggerMixin):
             top_k: Number of results to return
             filters: Optional metadata filters
             score_threshold: Minimum similarity score
+            tenant_id: Optional tenant ID for filtering (overrides instance tenant_id)
 
         Returns:
             RetrievalResult with search results
@@ -48,6 +52,7 @@ class VectorSearcher(LoggerMixin):
         start_time = time.time()
 
         top_k = top_k or self.top_k
+        effective_tenant_id = tenant_id or self.tenant_id
 
         try:
             # Generate query embedding
@@ -61,6 +66,7 @@ class VectorSearcher(LoggerMixin):
                 query_vector=query_embedding,
                 top_k=top_k,
                 filters=filters,
+                tenant_id=effective_tenant_id,
             )
 
             # Convert to SearchResult objects
@@ -106,6 +112,7 @@ class VectorSearcher(LoggerMixin):
         embedding: list[float],
         top_k: Optional[int] = None,
         filters: Optional[dict[str, Any]] = None,
+        tenant_id: Optional[str] = None,
     ) -> list[SearchResult]:
         """
         Search using a pre-computed embedding.
@@ -113,6 +120,7 @@ class VectorSearcher(LoggerMixin):
         Useful when you already have the embedding or want to reuse it.
         """
         top_k = top_k or self.top_k
+        effective_tenant_id = tenant_id or self.tenant_id
 
         try:
             vector_store = get_vector_store()
@@ -121,6 +129,7 @@ class VectorSearcher(LoggerMixin):
                 query_vector=embedding,
                 top_k=top_k,
                 filters=filters,
+                tenant_id=effective_tenant_id,
             )
 
             return [

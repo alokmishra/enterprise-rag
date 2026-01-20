@@ -54,10 +54,12 @@ class RAGPipeline(LoggerMixin):
         top_k: Optional[int] = None,
         temperature: float = 0.0,
         max_tokens: int = 4096,
+        tenant_id: Optional[str] = None,
     ):
         self.top_k = top_k or settings.DEFAULT_TOP_K
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.tenant_id = tenant_id
 
     async def query(
         self,
@@ -87,6 +89,7 @@ class RAGPipeline(LoggerMixin):
             "Starting RAG pipeline",
             query_id=query_id,
             question_length=len(question),
+            tenant_id=self.tenant_id,
         )
 
         # Step 1: Classify query complexity (simplified for now)
@@ -249,7 +252,10 @@ class RAGPipeline(LoggerMixin):
         strategy: RetrievalStrategy,
     ):
         """Retrieve relevant documents."""
-        searcher = get_vector_searcher()
+        from src.retrieval.search.vector import VectorSearcher
+
+        # Create tenant-scoped searcher
+        searcher = VectorSearcher(tenant_id=self.tenant_id)
         return await searcher.search(
             query=question,
             top_k=top_k,
@@ -356,13 +362,18 @@ class RAGPipeline(LoggerMixin):
         return round(sum(top_scores) / len(top_scores), 4) if top_scores else None
 
 
-# Singleton instance
-_pipeline: Optional[RAGPipeline] = None
+# Note: No singleton for RAG pipeline since it needs to be tenant-scoped
+def get_rag_pipeline(tenant_id: Optional[str] = None) -> RAGPipeline:
+    """
+    Get a RAG pipeline instance.
 
+    For tenant-scoped operations, a new instance is created
+    with the tenant_id to ensure proper isolation.
 
-def get_rag_pipeline() -> RAGPipeline:
-    """Get the global RAG pipeline instance."""
-    global _pipeline
-    if _pipeline is None:
-        _pipeline = RAGPipeline()
-    return _pipeline
+    Args:
+        tenant_id: Optional tenant ID for filtering
+
+    Returns:
+        RAGPipeline instance (tenant-scoped if tenant_id provided)
+    """
+    return RAGPipeline(tenant_id=tenant_id)

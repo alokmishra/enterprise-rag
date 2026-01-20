@@ -19,13 +19,20 @@ from src.storage.document.models import DocumentModel, ChunkModel, QueryLogModel
 class DocumentRepository(LoggerMixin):
     """Repository for document operations."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, tenant_id: str = "default"):
         self._session = session
+        self._tenant_id = tenant_id
+
+    @property
+    def tenant_id(self) -> str:
+        """Get the tenant ID for this repository."""
+        return self._tenant_id
 
     async def create(self, document: Document) -> str:
         """Create a new document."""
         doc_model = DocumentModel(
             id=document.id,
+            tenant_id=self._tenant_id,
             content=document.content,
             status=document.status,
             source=document.metadata.source,
@@ -43,14 +50,17 @@ class DocumentRepository(LoggerMixin):
         self._session.add(doc_model)
         await self._session.flush()
 
-        self.logger.debug("Created document", document_id=document.id)
+        self.logger.debug("Created document", document_id=document.id, tenant_id=self._tenant_id)
         return document.id
 
     async def get(self, document_id: str) -> Optional[Document]:
-        """Get a document by ID."""
+        """Get a document by ID (filtered by tenant)."""
         result = await self._session.execute(
             select(DocumentModel)
-            .where(DocumentModel.id == document_id)
+            .where(
+                DocumentModel.id == document_id,
+                DocumentModel.tenant_id == self._tenant_id,
+            )
             .options(selectinload(DocumentModel.chunks))
         )
         doc_model = result.scalar_one_or_none()
@@ -61,12 +71,13 @@ class DocumentRepository(LoggerMixin):
         return self._to_domain(doc_model)
 
     async def get_by_source(self, source: str, source_id: str) -> Optional[Document]:
-        """Get a document by source and source_id."""
+        """Get a document by source and source_id (filtered by tenant)."""
         result = await self._session.execute(
             select(DocumentModel)
             .where(
                 DocumentModel.source == source,
                 DocumentModel.source_id == source_id,
+                DocumentModel.tenant_id == self._tenant_id,
             )
             .options(selectinload(DocumentModel.chunks))
         )
@@ -84,8 +95,12 @@ class DocumentRepository(LoggerMixin):
         status: Optional[DocumentStatus] = None,
         source: Optional[str] = None,
     ) -> list[Document]:
-        """List documents with optional filtering."""
-        query = select(DocumentModel).order_by(DocumentModel.created_at.desc())
+        """List documents with optional filtering (filtered by tenant)."""
+        query = (
+            select(DocumentModel)
+            .where(DocumentModel.tenant_id == self._tenant_id)
+            .order_by(DocumentModel.created_at.desc())
+        )
 
         if status:
             query = query.where(DocumentModel.status == status)
@@ -103,10 +118,13 @@ class DocumentRepository(LoggerMixin):
         document_id: str,
         status: DocumentStatus,
     ) -> bool:
-        """Update document status."""
+        """Update document status (filtered by tenant)."""
         result = await self._session.execute(
             update(DocumentModel)
-            .where(DocumentModel.id == document_id)
+            .where(
+                DocumentModel.id == document_id,
+                DocumentModel.tenant_id == self._tenant_id,
+            )
             .values(status=status)
         )
         return result.rowcount > 0
@@ -116,18 +134,24 @@ class DocumentRepository(LoggerMixin):
         document_id: str,
         updates: dict[str, Any],
     ) -> bool:
-        """Update document fields."""
+        """Update document fields (filtered by tenant)."""
         result = await self._session.execute(
             update(DocumentModel)
-            .where(DocumentModel.id == document_id)
+            .where(
+                DocumentModel.id == document_id,
+                DocumentModel.tenant_id == self._tenant_id,
+            )
             .values(**updates)
         )
         return result.rowcount > 0
 
     async def delete(self, document_id: str) -> bool:
-        """Delete a document and its chunks."""
+        """Delete a document and its chunks (filtered by tenant)."""
         result = await self._session.execute(
-            delete(DocumentModel).where(DocumentModel.id == document_id)
+            delete(DocumentModel).where(
+                DocumentModel.id == document_id,
+                DocumentModel.tenant_id == self._tenant_id,
+            )
         )
         return result.rowcount > 0
 
@@ -136,8 +160,10 @@ class DocumentRepository(LoggerMixin):
         status: Optional[DocumentStatus] = None,
         source: Optional[str] = None,
     ) -> int:
-        """Count documents with optional filtering."""
-        query = select(func.count(DocumentModel.id))
+        """Count documents with optional filtering (filtered by tenant)."""
+        query = select(func.count(DocumentModel.id)).where(
+            DocumentModel.tenant_id == self._tenant_id
+        )
 
         if status:
             query = query.where(DocumentModel.status == status)
@@ -191,14 +217,21 @@ class DocumentRepository(LoggerMixin):
 class ChunkRepository(LoggerMixin):
     """Repository for chunk operations."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, tenant_id: str = "default"):
         self._session = session
+        self._tenant_id = tenant_id
+
+    @property
+    def tenant_id(self) -> str:
+        """Get the tenant ID for this repository."""
+        return self._tenant_id
 
     async def create_many(self, chunks: list[Chunk]) -> list[str]:
         """Create multiple chunks."""
         chunk_models = [
             ChunkModel(
                 id=chunk.id,
+                tenant_id=self._tenant_id,
                 document_id=chunk.document_id,
                 content=chunk.content,
                 content_type=chunk.content_type,
@@ -215,9 +248,12 @@ class ChunkRepository(LoggerMixin):
         return [c.id for c in chunks]
 
     async def get(self, chunk_id: str) -> Optional[Chunk]:
-        """Get a chunk by ID."""
+        """Get a chunk by ID (filtered by tenant)."""
         result = await self._session.execute(
-            select(ChunkModel).where(ChunkModel.id == chunk_id)
+            select(ChunkModel).where(
+                ChunkModel.id == chunk_id,
+                ChunkModel.tenant_id == self._tenant_id,
+            )
         )
         chunk_model = result.scalar_one_or_none()
 
@@ -227,10 +263,13 @@ class ChunkRepository(LoggerMixin):
         return self._to_domain(chunk_model)
 
     async def get_by_document(self, document_id: str) -> list[Chunk]:
-        """Get all chunks for a document."""
+        """Get all chunks for a document (filtered by tenant)."""
         result = await self._session.execute(
             select(ChunkModel)
-            .where(ChunkModel.document_id == document_id)
+            .where(
+                ChunkModel.document_id == document_id,
+                ChunkModel.tenant_id == self._tenant_id,
+            )
             .order_by(ChunkModel.position)
         )
         chunk_models = result.scalars().all()
@@ -238,18 +277,24 @@ class ChunkRepository(LoggerMixin):
         return [self._to_domain(m) for m in chunk_models]
 
     async def get_many(self, chunk_ids: list[str]) -> list[Chunk]:
-        """Get multiple chunks by ID."""
+        """Get multiple chunks by ID (filtered by tenant)."""
         result = await self._session.execute(
-            select(ChunkModel).where(ChunkModel.id.in_(chunk_ids))
+            select(ChunkModel).where(
+                ChunkModel.id.in_(chunk_ids),
+                ChunkModel.tenant_id == self._tenant_id,
+            )
         )
         chunk_models = result.scalars().all()
 
         return [self._to_domain(m) for m in chunk_models]
 
     async def delete_by_document(self, document_id: str) -> int:
-        """Delete all chunks for a document."""
+        """Delete all chunks for a document (filtered by tenant)."""
         result = await self._session.execute(
-            delete(ChunkModel).where(ChunkModel.document_id == document_id)
+            delete(ChunkModel).where(
+                ChunkModel.document_id == document_id,
+                ChunkModel.tenant_id == self._tenant_id,
+            )
         )
         return result.rowcount
 
@@ -269,8 +314,14 @@ class ChunkRepository(LoggerMixin):
 class QueryLogRepository(LoggerMixin):
     """Repository for query log operations."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, tenant_id: str = "default"):
         self._session = session
+        self._tenant_id = tenant_id
+
+    @property
+    def tenant_id(self) -> str:
+        """Get the tenant ID for this repository."""
+        return self._tenant_id
 
     async def create(
         self,
@@ -288,6 +339,7 @@ class QueryLogRepository(LoggerMixin):
 
         log_model = QueryLogModel(
             id=query_id,
+            tenant_id=self._tenant_id,
             query=query,
             answer=answer,
             conversation_id=conversation_id,
@@ -304,9 +356,12 @@ class QueryLogRepository(LoggerMixin):
         return query_id
 
     async def get(self, query_id: str) -> Optional[QueryLogModel]:
-        """Get a query log by ID."""
+        """Get a query log by ID (filtered by tenant)."""
         result = await self._session.execute(
-            select(QueryLogModel).where(QueryLogModel.id == query_id)
+            select(QueryLogModel).where(
+                QueryLogModel.id == query_id,
+                QueryLogModel.tenant_id == self._tenant_id,
+            )
         )
         return result.scalar_one_or_none()
 
@@ -316,10 +371,13 @@ class QueryLogRepository(LoggerMixin):
         rating: int,
         feedback: Optional[str] = None,
     ) -> bool:
-        """Update feedback for a query."""
+        """Update feedback for a query (filtered by tenant)."""
         result = await self._session.execute(
             update(QueryLogModel)
-            .where(QueryLogModel.id == query_id)
+            .where(
+                QueryLogModel.id == query_id,
+                QueryLogModel.tenant_id == self._tenant_id,
+            )
             .values(rating=rating, feedback=feedback)
         )
         return result.rowcount > 0

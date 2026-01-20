@@ -34,6 +34,12 @@ class DocumentModel(Base):
     __tablename__ = "documents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36),
+        nullable=False,
+        index=True,
+        default="default",
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(DocumentStatus),
@@ -88,6 +94,12 @@ class ChunkModel(Base):
     __tablename__ = "chunks"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36),
+        nullable=False,
+        index=True,
+        default="default",
+    )
     document_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("documents.id", ondelete="CASCADE"),
@@ -127,6 +139,12 @@ class QueryLogModel(Base):
     __tablename__ = "query_logs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36),
+        nullable=False,
+        index=True,
+        default="default",
+    )
     query: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     conversation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
